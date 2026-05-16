@@ -239,17 +239,78 @@
     .empty-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
     .empty-state .big-emoji { font-size:3rem; margin-bottom:16px; }
 
+    /* ─── REGEN NAVIGATION ─── */
+    .regen-nav {
+      display:flex; align-items:center; gap:5px; margin-top:4px;
+      font-size:0.72rem; color:var(--text-muted);
+    }
+    .regen-arrow {
+      background:none; border:none; color:var(--text-muted); cursor:pointer;
+      padding:2px 6px; border-radius:5px; font-size:0.85rem; line-height:1;
+      transition:color 0.13s, background 0.13s;
+    }
+    .regen-arrow:hover:not(:disabled) { background:var(--surface2); color:var(--accent); }
+    .regen-arrow:disabled { opacity:0.25; cursor:default; }
+    .regen-counter { font-size:0.72rem; color:var(--text-muted); white-space:nowrap; }
+
+    /* ─── MOBILE ─── */
     @media(max-width:640px) {
-      .chat-sidebar { width:200px; }
-      .chat-messages { padding:12px; }
-      .chat-input-area { padding:10px 12px; }
-      .message { max-width:90%; }
+      .chat-sidebar { width:220px; }
+      .chat-messages { padding:10px; gap:10px; }
+      .chat-input-area { padding:8px 10px; }
+      .message { max-width:92%; }
+      .mode-bar { padding:6px 10px 2px; gap:4px; }
+      .mode-btn { padding:3px 9px; font-size:0.7rem; }
+      .chat-header { padding:9px 12px; gap:7px; }
+      .chat-header-name { font-size:0.86rem; }
+      .chat-header-actions button { padding:4px 7px !important; font-size:0.72rem !important; }
+      .streak-badge { padding:3px 7px; font-size:0.7rem; }
+      .msg-bubble { font-size:0.87rem; padding:9px 12px; }
+      #messageInput { font-size:0.88rem; }
+      /* Hide sidebar by default on mobile */
+      .chat-sidebar { position:absolute; left:0; top:0; height:100%; z-index:200; }
+      .sidebar-toggle { left:0; border-radius:0 7px 7px 0; }
+      .chat-outer { position:relative; }
+    }
+    @media(max-width:400px) {
+      .message { max-width:96%; }
+      .chat-header-name { font-size:0.8rem; }
     }
   </style>
 </head>
 <body>
 
 <div class="auth-overlay" id="authOverlay"></div>
+
+<!-- EDIT BOT MODAL -->
+<div class="setup-screen" id="editBotScreen" style="display:none">
+  <div class="setup-box" style="max-width:520px">
+    <h2>✏️ Editar Personaje</h2>
+    <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px">Modifica los datos de este bot. Los cambios aplican desde el próximo mensaje.</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center">
+        <label style="font-size:0.8rem;color:var(--text-muted);min-width:90px">Nombre</label>
+        <input id="editBot_name" type="text" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none" placeholder="Nombre del bot">
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <label style="font-size:0.8rem;color:var(--text-muted);min-width:90px">Emoji</label>
+        <input id="editBot_emoji" type="text" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none" placeholder="🤖">
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <label style="font-size:0.8rem;color:var(--text-muted);min-width:90px;padding-top:8px">Personalidad</label>
+        <textarea id="editBot_personality" rows="4" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;resize:vertical" placeholder="Describe cómo se comporta el bot..."></textarea>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-start">
+        <label style="font-size:0.8rem;color:var(--text-muted);min-width:90px;padding-top:8px">Saludo</label>
+        <textarea id="editBot_greeting" rows="2" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:0.85rem;outline:none;resize:vertical" placeholder="Primer mensaje del bot..."></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px">
+      <button class="btn btn-ghost" onclick="document.getElementById('editBotScreen').style.display='none'">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditBot()">💾 Guardar cambios</button>
+    </div>
+  </div>
+</div>
 
 <!-- SETUP SCREEN -->
 <div class="setup-screen" id="setupScreen" style="display:none">
@@ -270,6 +331,7 @@
 
 <!-- CONTEXT MENU -->
 <div class="ctx-menu" id="ctxMenu" style="display:none">
+  <div class="ctx-item" id="ctxRegenItem" onclick="ctxRegenMsg()" style="display:none">🔄 Regenerar</div>
   <div class="ctx-item" onclick="ctxEditMsg()">✏️ Editar mensaje</div>
   <div class="ctx-item danger" onclick="ctxDeleteMsg()">🗑️ Borrar mensaje</div>
 </div>
@@ -304,6 +366,7 @@
           🔥 <span id="streakNum">0</span> <span style="font-size:0.66em;opacity:0.75">días</span>
         </button>
         <div class="chat-header-actions">
+          <button class="btn btn-ghost" onclick="openEditBot()" style="padding:5px 9px;font-size:0.78rem;" title="Editar bot">✏️</button>
           <button class="btn btn-ghost" onclick="openSetup()" style="padding:5px 9px;font-size:0.78rem;">🔑</button>
           <button class="btn btn-ghost" onclick="toggleConsole()" style="padding:5px 9px;font-size:0.78rem;">🖥</button>
           <button class="btn btn-danger" onclick="confirmClear()" style="padding:5px 9px;">🗑</button>
@@ -376,12 +439,19 @@ function saveKeys() {
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────────────────────
-let sidebarOpen = true;
+let sidebarOpen = window.innerWidth > 640;
 function toggleSidebar() {
   sidebarOpen = !sidebarOpen;
   document.getElementById('chatSidebar').classList.toggle('collapsed', !sidebarOpen);
   document.getElementById('sidebarToggle').textContent = sidebarOpen ? '◀' : '▶';
 }
+// Initialize sidebar state
+document.addEventListener('DOMContentLoaded', () => {
+  if (!sidebarOpen) {
+    document.getElementById('chatSidebar').classList.add('collapsed');
+    document.getElementById('sidebarToggle').textContent = '▶';
+  }
+});
 
 // ─── STATE ──────────────────────────────────────────────────────────────────
 const params      = new URLSearchParams(window.location.search);
@@ -393,6 +463,10 @@ let chatMode      = 'reflexivo';
 let currentChatId = null;
 let ctxMsgIndex   = -1;
 let ctxMsgIsUser  = false;
+
+// regenVariants: map of AI message index → array of content strings, plus current index
+// We store it in session to survive re-renders
+let regenVariants = {}; // { [msgIndex]: { variants: [...], current: 0 } }
 
 // ─── STREAK ─────────────────────────────────────────────────────────────────
 function streakKey()     { return 'jcai_streak_' + charId; }
@@ -470,6 +544,7 @@ function loadSession(id) {
   const s = sessions.find(x => x.id === id);
   if (!s) return;
   currentChatId = id;
+  regenVariants = {}; // reset regen variants for new session
   messages = s.messages.length ? s.messages : [{ role:'assistant', content:character.greeting }];
   if (!s.messages.length) saveCurrentSession(messages);
   renderMessages(); updateMemoryHint(); scrollToBottom(); renderSidebar();
@@ -633,9 +708,23 @@ function buildBubbleEl(msg, index) {
     avatarHtml = `<div class="msg-avatar">${character.emoji||'🤖'}</div>`;
   }
 
+  // Build regen navigation if AI message has variants
+  let regenNavHtml = '';
+  if (!isUser && regenVariants[index] && regenVariants[index].variants.length > 1) {
+    const rv = regenVariants[index];
+    const cur = rv.current + 1, total = rv.variants.length;
+    regenNavHtml = `
+      <div class="regen-nav">
+        <button class="regen-arrow" onclick="navigateRegen(${index},-1)" ${rv.current===0?'disabled':''}title="Respuesta anterior">◀</button>
+        <span class="regen-counter">${cur}/${total}</span>
+        <button class="regen-arrow" onclick="navigateRegen(${index},1)" ${rv.current===total-1?'disabled':''}title="Respuesta siguiente">▶</button>
+      </div>`;
+  }
+
   wrapper.innerHTML = `${avatarHtml}
     <div class="msg-content">
       <div class="msg-bubble" data-index="${index}" oncontextmenu="showCtxMenu(event,${index},${isUser})">${formatMsg(msg.content)}</div>
+      ${regenNavHtml}
     </div>`;
   return wrapper;
 }
@@ -678,6 +767,8 @@ function updateMemoryHint() {
 function showCtxMenu(e, index, isUser) {
   e.preventDefault();
   ctxMsgIndex = index; ctxMsgIsUser = isUser;
+  // Show "Regenerar" only for AI messages
+  document.getElementById('ctxRegenItem').style.display = isUser ? 'none' : 'flex';
   const m = document.getElementById('ctxMenu');
   m.style.display = 'block';
   m.style.left = Math.min(e.clientX, window.innerWidth-170) + 'px';
@@ -687,9 +778,54 @@ document.addEventListener('click', () => document.getElementById('ctxMenu').styl
 
 function ctxDeleteMsg() {
   if (ctxMsgIndex < 0) return;
+  // Remove regen variants for this index
+  delete regenVariants[ctxMsgIndex];
   messages.splice(ctxMsgIndex, 1);
+  // Re-key regenVariants since indices shifted
+  const newRegen = {};
+  Object.entries(regenVariants).forEach(([k, v]) => {
+    const ki = parseInt(k);
+    newRegen[ki > ctxMsgIndex ? ki - 1 : ki] = v;
+  });
+  regenVariants = newRegen;
   saveCurrentSession(messages); renderMessages(); updateMemoryHint(); renderSidebar();
   logConsole('Mensaje borrado. El bot leerá el contexto actualizado.','ok');
+}
+
+async function ctxRegenMsg() {
+  if (ctxMsgIndex < 0 || isLoading) return;
+  const idx = ctxMsgIndex;
+  if (!regenVariants[idx]) {
+    // First regen: store original as variant 0, will add new as variant 1
+    regenVariants[idx] = { variants: [messages[idx].content], current: 0 };
+  }
+  setLoading(true); showTyping();
+  try {
+    // Temporarily build history up to (not including) this AI message
+    const saved = messages.slice();
+    messages = messages.slice(0, idx); // pretend AI hasn't replied yet
+    const reply = await callWithFallback();
+    messages = saved; // restore
+    removeTyping();
+    regenVariants[idx].variants.push(reply);
+    regenVariants[idx].current = regenVariants[idx].variants.length - 1;
+    messages[idx].content = reply;
+    saveCurrentSession(messages);
+    renderMessages(); updateMemoryHint(); renderSidebar();
+    logConsole('Respuesta regenerada ✓','ok');
+  } catch(err) {
+    removeTyping(); logConsole('Error al regenerar: '+err.message,'error');
+  }
+  setLoading(false);
+}
+
+function navigateRegen(msgIndex, direction) {
+  const rv = regenVariants[msgIndex];
+  if (!rv) return;
+  rv.current = Math.max(0, Math.min(rv.variants.length - 1, rv.current + direction));
+  messages[msgIndex].content = rv.variants[rv.current];
+  saveCurrentSession(messages);
+  renderMessages(); updateMemoryHint();
 }
 
 function ctxEditMsg() {
@@ -746,30 +882,37 @@ async function regenerateFromEdit() {
 async function sendMessage() {
   const input = document.getElementById('messageInput');
   const text  = input.value.trim();
-  if (!text || isLoading) return;
+  if (isLoading) return;
   if (!hasAnyKey()) { openSetup(); return; }
 
   const days = recordStreak();
 
-  const userMsg = { role:'user', content:text };
-  messages.push(userMsg);
-  saveCurrentSession(messages);
-  appendBubble(userMsg, messages.length-1);
-  input.value = ''; input.style.height = 'auto';
-  setLoading(true); showTyping(); updateMemoryHint(); renderSidebar();
+  if (text) {
+    // Normal: user sends message(s) — support multiple messages separated by \n\n? No, just send as one block
+    const userMsg = { role:'user', content:text };
+    messages.push(userMsg);
+    saveCurrentSession(messages);
+    appendBubble(userMsg, messages.length-1);
+    input.value = ''; input.style.height = 'auto';
+    updateMemoryHint(); renderSidebar();
+  }
+  // If text is empty: bot sends another message (no user bubble added)
+
+  setLoading(true); showTyping();
 
   try {
     const reply = await callWithFallback();
     removeTyping();
     let final = reply;
-    if (isStreakEnabled()) {
+    if (isStreakEnabled() && text) {
       const sc = getStreakComment(days);
       if (sc && days > 1) final = reply + '\n\n' + sc;
     }
     const aiMsg = { role:'assistant', content:final };
+    const aiIdx = messages.length;
     messages.push(aiMsg);
     saveCurrentSession(messages);
-    appendBubble(aiMsg, messages.length-1);
+    appendBubble(aiMsg, aiIdx);
     updateMemoryHint(); renderSidebar();
   } catch(err) {
     removeTyping(); logConsole('Todas las APIs fallaron: '+err.message,'error');
@@ -848,6 +991,36 @@ async function confirmClear() {
   messages=[{role:'assistant',content:character.greeting}];
   saveCurrentSession(messages); renderMessages(); updateMemoryHint(); scrollToBottom(); renderSidebar();
   logConsole('Chat borrado','ok');
+}
+
+// ─── EDIT BOT ────────────────────────────────────────────────────────────────
+function openEditBot() {
+  if (!character) return;
+  document.getElementById('editBot_name').value        = character.name        || '';
+  document.getElementById('editBot_emoji').value       = character.emoji       || '';
+  document.getElementById('editBot_personality').value = character.personality || '';
+  document.getElementById('editBot_greeting').value    = character.greeting    || '';
+  document.getElementById('editBotScreen').style.display = 'flex';
+}
+
+async function saveEditBot() {
+  const name        = document.getElementById('editBot_name').value.trim();
+  const emoji       = document.getElementById('editBot_emoji').value.trim();
+  const personality = document.getElementById('editBot_personality').value.trim();
+  const greeting    = document.getElementById('editBot_greeting').value.trim();
+  if (!name) { alert('El nombre no puede estar vacío.'); return; }
+  character.name        = name;
+  character.emoji       = emoji        || character.emoji;
+  character.personality = personality  || character.personality;
+  character.greeting    = greeting     || character.greeting;
+  // Persist to Firebase if possible
+  try {
+    if (typeof saveCharacter === 'function') await saveCharacter(character, currentUid);
+  } catch(e) { logConsole('No se pudo guardar en Firebase: '+e.message,'error'); }
+  document.getElementById('editBotScreen').style.display = 'none';
+  document.title = 'JcAi — ' + character.name;
+  renderCharacterHeader(); renderSidebar();
+  logConsole('Personaje actualizado: '+character.name,'ok');
 }
 
 function escapeHtml(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
