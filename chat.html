@@ -239,6 +239,40 @@
     .empty-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
     .empty-state .big-emoji { font-size:3rem; margin-bottom:16px; }
 
+    /* ─── AI SELECTOR BAR ─── */
+    .ai-bar {
+      display:flex; align-items:center; gap:6px; padding:8px 14px 0;
+      overflow-x:auto; scrollbar-width:none; flex-shrink:0; border-bottom:1px solid var(--border);
+      padding-bottom:8px;
+    }
+    .ai-bar::-webkit-scrollbar { display:none; }
+    .ai-bar-label {
+      font-size:0.68rem; font-weight:700; color:var(--text-muted);
+      text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap; flex-shrink:0;
+    }
+    .ai-chip {
+      display:flex; align-items:center; gap:5px; padding:4px 11px; border-radius:20px;
+      font-size:0.75rem; font-weight:600; white-space:nowrap; cursor:pointer; flex-shrink:0;
+      border:1px solid var(--border); background:var(--surface2); color:var(--text);
+      transition:all 0.18s; position:relative;
+    }
+    .ai-chip:hover:not(.ai-chip-disabled) { border-color:var(--accent); color:var(--accent); }
+    .ai-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .ai-chip.active .ai-chip-dot { background:#fff; }
+    .ai-chip-disabled {
+      opacity:0.35; cursor:not-allowed; filter:grayscale(1);
+      border-style:dashed;
+    }
+    .ai-chip-dot {
+      width:6px; height:6px; border-radius:50%; flex-shrink:0;
+      background:var(--text-muted);
+    }
+    .ai-chip.active .ai-chip-dot { background:#fff; box-shadow:0 0 4px rgba(255,255,255,0.7); }
+    .ai-chip-best {
+      font-size:0.58rem; background:rgba(247,200,106,0.25); color:#f7c86a;
+      border-radius:4px; padding:1px 4px; font-weight:700;
+    }
+
     /* ─── REGEN NAVIGATION ─── */
     .regen-nav {
       display:flex; align-items:center; gap:5px; margin-top:4px;
@@ -373,6 +407,12 @@
         </div>
       </header>
 
+      <!-- AI SELECTOR -->
+      <div class="ai-bar" id="aiBar">
+        <span class="ai-bar-label">IA:</span>
+        <!-- chips rendered by JS -->
+      </div>
+
       <div class="mode-bar" id="modeBar">
         <button class="mode-btn" data-mode="rapido"    onclick="setMode('rapido')"   >⚡ Rápido</button>
         <button class="mode-btn" data-mode="sinfiltro" onclick="setMode('sinfiltro')">🔓 Sin filtro</button>
@@ -441,6 +481,7 @@ async function loadKeysFromCloud() {
   } catch(e) {
     logConsole('No se pudieron cargar keys de la nube: ' + e.message, 'error');
   }
+  // renderAiBar se llama después en init()
 }
 
 // Guarda keys en Firestore + localStorage
@@ -472,6 +513,7 @@ async function saveKeys() {
   if (!Object.keys(keys).length) { alert('Agrega al menos una key.'); return; }
   document.getElementById('setupScreen').style.display = 'none';
   await saveKeysToCloud(keys);
+  renderAiBar(); // update disabled state
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────────────────────
@@ -503,6 +545,7 @@ let ctxMsgIsUser  = false;
 // regenVariants: map of AI message index → array of content strings, plus current index
 // We store it in session to survive re-renders
 let regenVariants = {}; // { [msgIndex]: { variants: [...], current: 0 } }
+let selectedAi    = 'auto'; // 'auto' | 'gemini' | 'openrouter' | 'groq' | 'mistral'
 
 // ─── STREAK ─────────────────────────────────────────────────────────────────
 function streakKey()     { return 'jcai_streak_' + charId; }
@@ -703,7 +746,7 @@ async function init() {
   messages = sess.messages.length ? sess.messages : [{ role:'assistant', content:character.greeting }];
   if (!sess.messages.length) saveCurrentSession(messages);
 
-  renderMessages(); updateMemoryHint(); scrollToBottom(); renderSidebar();
+  renderMessages(); updateMemoryHint(); scrollToBottom(); renderSidebar(); renderAiBar();
   if (!hasAnyKey()) { logConsole('No hay keys configuradas','error'); openSetup(); }
   else logConsole('Personaje cargado: '+character.name,'ok');
 }
@@ -958,13 +1001,64 @@ async function sendMessage() {
   setLoading(false);
 }
 
+// ─── AI SELECTOR ─────────────────────────────────────────────────────────────
+const AI_META = [
+  { id:'gemini',      label:'Gemini',      icon:'✦', best:true  },
+  { id:'openrouter',  label:'OpenRouter',  icon:'◈', best:false },
+  { id:'groq',        label:'Groq',        icon:'⚡', best:false },
+  { id:'mistral',     label:'Mistral',     icon:'◆', best:false },
+];
+
+function renderAiBar() {
+  const bar  = document.getElementById('aiBar');
+  const keys = getKeys();
+  // Auto chip always available
+  let html = `<div class="ai-chip ${selectedAi==='auto'?'active':''}" onclick="selectAi('auto')">
+    <span class="ai-chip-dot"></span>Auto
+  </div>`;
+  for (const ai of AI_META) {
+    const hasKey = !!keys[ai.id];
+    const isActive = selectedAi === ai.id;
+    const disabledClass = hasKey ? '' : 'ai-chip-disabled';
+    const bestBadge = ai.best ? `<span class="ai-chip-best">TOP</span>` : '';
+    const onclick = hasKey ? `onclick="selectAi('${ai.id}')"` : '';
+    const title = hasKey ? ai.label : `${ai.label} (sin key)`;
+    html += `<div class="ai-chip ${isActive?'active':''} ${disabledClass}" ${onclick} title="${title}">
+      <span class="ai-chip-dot"></span>${ai.icon} ${ai.label}${bestBadge}
+    </div>`;
+  }
+  bar.innerHTML = `<span class="ai-bar-label">IA:</span>` + html;
+}
+
+function selectAi(id) {
+  selectedAi = id;
+  renderAiBar();
+  logConsole('IA seleccionada: ' + (id === 'auto' ? 'Auto (Gemini → OpenRouter → Groq → Mistral)' : id), 'ok');
+}
+
 // ─── API FALLBACK ────────────────────────────────────────────────────────────
 async function callWithFallback() {
-  const keys=getKeys(), errors=[];
-  if (keys.openrouter) { try { const r=await callOpenRouter(keys.openrouter); logConsole('OpenRouter ✓','ok'); return r; } catch(e){logConsole('OR falló: '+e.message,'error');errors.push('OR: '+e.message);} }
-  if (keys.groq)       { try { const r=await callGroq(keys.groq);             logConsole('Groq ✓','ok');       return r; } catch(e){logConsole('Groq falló: '+e.message,'error');errors.push('Groq: '+e.message);} }
-  if (keys.mistral)    { try { const r=await callMistral(keys.mistral);        logConsole('Mistral ✓','ok');    return r; } catch(e){logConsole('Mistral falló: '+e.message,'error');errors.push('Mistral: '+e.message);} }
-  if (keys.gemini)     { try { const r=await callGemini(keys.gemini);          logConsole('Gemini ✓','ok');     return r; } catch(e){logConsole('Gemini falló: '+e.message,'error');errors.push('Gemini: '+e.message);} }
+  const keys = getKeys(), errors = [];
+
+  async function tryApi(name, fn) {
+    if (!keys[name]) return false;
+    try { const r = await fn(keys[name]); logConsole(name + ' ✓', 'ok'); return r; }
+    catch(e) { logConsole(name + ' falló: ' + e.message, 'error'); errors.push(name + ': ' + e.message); return false; }
+  }
+
+  // If user picked a specific AI, try it first
+  if (selectedAi !== 'auto') {
+    const fnMap = { gemini:callGemini, openrouter:callOpenRouter, groq:callGroq, mistral:callMistral };
+    const r = await tryApi(selectedAi, fnMap[selectedAi]);
+    if (r !== false) return r;
+    logConsole('IA seleccionada falló, usando fallback automático...', 'error');
+  }
+
+  // Gemini first (best for roleplay)
+  const r1 = await tryApi('gemini',      callGemini);      if (r1 !== false) return r1;
+  const r2 = await tryApi('openrouter',  callOpenRouter);  if (r2 !== false) return r2;
+  const r3 = await tryApi('groq',        callGroq);        if (r3 !== false) return r3;
+  const r4 = await tryApi('mistral',     callMistral);     if (r4 !== false) return r4;
   throw new Error(errors.join(' | ') || 'Sin keys configuradas');
 }
 
