@@ -19,12 +19,19 @@
       <div class="chat-header-status" id="headerStatus">IA activa</div>
     </div>
     <div class="chat-header-actions">
+      <button class="btn btn-ghost" onclick="toggleConsole()" style="font-size:0.8rem">🖥 Consola</button>
       <button class="btn btn-danger" onclick="confirmClear()">🗑 Limpiar</button>
     </div>
   </header>
 
   <!-- Mensajes -->
   <div class="chat-messages" id="chatMessages"></div>
+
+  <!-- Consola de errores -->
+  <div id="errorConsole" style="display:none; background:#0d0d1a; border-top:1px solid #f76a8a; padding:12px 20px; max-height:150px; overflow-y:auto; font-family:monospace; font-size:0.78rem; color:#f76a8a;">
+    <div style="color:#6b6b80; margin-bottom:6px;">── Consola ──</div>
+    <div id="consoleOutput"></div>
+  </div>
 
   <!-- Input -->
   <div class="chat-input-area">
@@ -50,12 +57,33 @@
 
 <script src="characters.js"></script>
 <script>
+  // ─── CONFIG ───────────────────────────────────────────────
+  const GEMINI_KEY = 'AIzaSyD1OkMgkEZimTDAN3B-3agH7KdKUmUcALU'; // ← pon tu key aquí
+  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+
   // ─── ESTADO ───────────────────────────────────────────────
   const params = new URLSearchParams(window.location.search);
   const charId = params.get('id');
   let character = null;
-  let messages = []; // historial local {role, content}
+  let messages = [];
   let isLoading = false;
+
+  // ─── CONSOLA VISIBLE ──────────────────────────────────────
+  function logConsole(msg, type = 'info') {
+    const out = document.getElementById('consoleOutput');
+    const color = type === 'error' ? '#f76a8a' : type === 'ok' ? '#7c6af7' : '#6b6b80';
+    const time = new Date().toLocaleTimeString();
+    out.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
+    out.scrollTop = out.scrollHeight;
+    if (type === 'error') {
+      document.getElementById('errorConsole').style.display = 'block';
+    }
+  }
+
+  function toggleConsole() {
+    const c = document.getElementById('errorConsole');
+    c.style.display = c.style.display === 'none' ? 'block' : 'none';
+  }
 
   // ─── INIT ─────────────────────────────────────────────────
   function init() {
@@ -75,11 +103,9 @@
     document.getElementById('headerAvatar').textContent = character.emoji;
     document.getElementById('headerName').textContent = character.name;
 
-    // Cargar historial guardado
     messages = loadHistory(charId);
 
     if (messages.length === 0) {
-      // Primer saludo
       const greeting = { role: 'assistant', content: character.greeting };
       messages.push(greeting);
       saveHistory(charId, messages);
@@ -88,6 +114,7 @@
     renderMessages();
     updateMemoryHint();
     scrollToBottom();
+    logConsole('Personaje cargado: ' + character.name, 'ok');
   }
 
   // ─── RENDER ───────────────────────────────────────────────
@@ -146,7 +173,7 @@
     const count = messages.length;
     const hint = document.getElementById('memoryHint');
     if (count >= MAX_MEMORY - 5) {
-      hint.textContent = `Memoria: ${count}/${MAX_MEMORY} mensajes — los más antiguos se irán borrando.`;
+      hint.textContent = `Memoria: ${count}/${MAX_MEMORY} — los más antiguos se borrarán pronto.`;
     } else {
       hint.textContent = `Memoria activa: ${count} mensajes`;
     }
@@ -158,7 +185,6 @@
     const text = input.value.trim();
     if (!text || isLoading) return;
 
-    // Agregar mensaje del usuario
     const userMsg = { role: 'user', content: text };
     messages.push(userMsg);
     saveHistory(charId, messages);
@@ -171,55 +197,78 @@
     updateMemoryHint();
 
     try {
-      const reply = await callClaude(text);
+      logConsole('Enviando mensaje a Gemini...');
+      const reply = await callGemini();
       removeTyping();
       const aiMsg = { role: 'assistant', content: reply };
       messages.push(aiMsg);
       saveHistory(charId, messages);
       appendBubble(aiMsg);
       updateMemoryHint();
+      logConsole('Respuesta recibida ✓', 'ok');
     } catch (err) {
       removeTyping();
-      const errMsg = { role: 'assistant', content: '⚠️ Ocurrió un error al responder. Intenta de nuevo.' };
+      logConsole('ERROR: ' + err.message, 'error');
+      const errMsg = { role: 'assistant', content: `⚠️ Error: ${err.message}` };
       appendBubble(errMsg);
-      console.error(err);
     }
 
     setLoading(false);
   }
 
-  // ─── LLAMADA A LA API ─────────────────────────────────────
-  async function callClaude(userText) {
-    const apiMessages = messages
-      .slice(-MAX_MEMORY)
-      .map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      }));
+  // ─── LLAMADA A GEMINI ─────────────────────────────────────
+  async function callGemini() {
+    let raw = messages.slice(-MAX_MEMORY);
 
-    const GEMINI_KEY = 'AIzaSyD1OkMgkEZimTDAN3B-3agH7KdKUmUcALU';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: character.personality + '\n\nResponde siempre en español a menos que el usuario escriba en otro idioma.' }] },
-        contents: apiMessages
-      })
-    });
-
-    if (!response.ok) {
-      const err = await response.json();
-      console.error('Error Gemini:', err);
-      throw new Error(err.error?.message || 'API error');
+    // Construir contents alternando roles correctamente
+    let contents = [];
+    for (const m of raw) {
+      const role = m.role === 'assistant' ? 'model' : 'user';
+      if (contents.length > 0 && contents[contents.length - 1].role === role) {
+        // Fusionar mensajes consecutivos del mismo rol
+        contents[contents.length - 1].parts[0].text += '\n' + m.content;
+      } else {
+        contents.push({ role, parts: [{ text: m.content }] });
+      }
     }
 
+    // Gemini no puede empezar con 'model'
+    while (contents.length > 0 && contents[0].role === 'model') {
+      contents.shift();
+    }
+
+    if (contents.length === 0) throw new Error('No hay mensajes para enviar.');
+
+    logConsole(`Historial: ${contents.length} turnos`);
+
+    const body = {
+      system_instruction: {
+        parts: [{ text: character.personality + '\n\nResponde siempre en español a menos que el usuario escriba en otro idioma. Sé fiel a tu personalidad.' }]
+      },
+      contents
+    };
+
+    const response = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
     const data = await response.json();
-    console.log('Respuesta Gemini:', data);
+
+    if (!response.ok) {
+      logConsole('Respuesta API: ' + JSON.stringify(data), 'error');
+      throw new Error(data.error?.message || `HTTP ${response.status}`);
+    }
+
+    if (!data.candidates || !data.candidates[0]) {
+      logConsole('Sin candidatos: ' + JSON.stringify(data), 'error');
+      throw new Error('Gemini no devolvió respuesta.');
+    }
+
     return data.candidates[0].content.parts[0].text;
   }
-  
+
   // ─── UI HELPERS ───────────────────────────────────────────
   function setLoading(val) {
     isLoading = val;
@@ -243,12 +292,12 @@
     if (confirm(`¿Borrar todo el historial con ${character.name}?`)) {
       messages = [];
       clearHistory(charId);
-      // Volver a poner el saludo
       messages.push({ role: 'assistant', content: character.greeting });
       saveHistory(charId, messages);
       renderMessages();
       updateMemoryHint();
       scrollToBottom();
+      logConsole('Historial borrado', 'ok');
     }
   }
 
