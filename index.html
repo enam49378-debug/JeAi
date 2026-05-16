@@ -8,9 +8,17 @@
 </head>
 <body>
 
+<!-- ─── AUTH OVERLAY ─── -->
+<div class="auth-overlay" id="authOverlay"></div>
+
 <nav>
   <span class="nav-logo">JcAi</span>
   <div class="nav-actions">
+    <div class="nav-user" id="navUser" style="display:none">
+      <div class="nav-user-avatar" id="navUserPhoto"></div>
+      <span class="nav-user-name" id="navUserName"></span>
+      <button class="btn btn-ghost btn-sm" onclick="logOut()">Salir</button>
+    </div>
     <button class="btn btn-primary" onclick="openModal()">+ Nuevo personaje</button>
   </div>
 </nav>
@@ -25,10 +33,15 @@
   <div class="section-header">
     <h2>Tus personajes</h2>
   </div>
-  <div class="characters-grid" id="charactersGrid"></div>
+  <div class="characters-grid" id="charactersGrid">
+    <!-- Skeleton loader -->
+    <div class="char-card skeleton"></div>
+    <div class="char-card skeleton"></div>
+    <div class="char-card skeleton"></div>
+  </div>
 </section>
 
-<!-- Modal crear personaje -->
+<!-- ─── MODAL CREAR PERSONAJE ─── -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h2>✦ Nuevo personaje</h2>
@@ -65,16 +78,120 @@
 
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="createCharacter()">Crear personaje</button>
+      <button class="btn btn-primary" id="createBtn" onclick="createCharacter()">Crear personaje</button>
     </div>
   </div>
 </div>
 
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script src="firebase-config.js"></script>
 <script src="characters.js"></script>
+<script src="auth.js"></script>
+
 <script>
+  // ─── EMOJIS ───────────────────────────────────────────────
   const EMOJIS = ['😊','🌙','🔥','🤖','🧙','⚔️','🌸','🦋','🐉','🌊','⚡','🎭','👾','🦊','🐺','🌺','💎','🗡️','🧠','🎪','🌈','🦅','🐬','🌿','✨','🎯','🏔️','🌌'];
   let selectedEmoji = EMOJIS[0];
 
+  // ─── CALLBACK DE AUTH ─────────────────────────────────────
+  function onUserAuthenticated(user) {
+    // Mostrar info del usuario en la nav
+    const navUser = document.getElementById('navUser');
+    navUser.style.display = 'flex';
+    document.getElementById('navUserName').textContent = user.displayName || user.email;
+
+    const photoEl = document.getElementById('navUserPhoto');
+    if (user.photoURL) {
+      photoEl.style.backgroundImage = `url(${user.photoURL})`;
+      photoEl.style.backgroundSize = 'cover';
+    } else {
+      photoEl.textContent = (user.displayName || user.email || '?')[0].toUpperCase();
+    }
+
+    renderGrid();
+  }
+
+  // ─── RENDER GRID ──────────────────────────────────────────
+  async function renderGrid() {
+    const grid = document.getElementById('charactersGrid');
+    grid.innerHTML = '<div class="char-card skeleton"></div><div class="char-card skeleton"></div><div class="char-card skeleton"></div>';
+
+    try {
+      const chars = await loadCharacters(currentUid);
+
+      grid.innerHTML = chars.map((c, i) => `
+        <div class="char-card" style="animation-delay:${i * 0.07}s" onclick="goToChat('${c.id}')">
+          <button class="char-delete-btn" onclick="event.stopPropagation(); confirmDelete('${c.id}', '${c.name}')" title="Eliminar">×</button>
+          <div class="char-avatar">${c.emoji}</div>
+          <div class="char-name">${c.name}</div>
+          <div class="char-desc">${c.description}</div>
+          <span class="char-tag">${c.tag}</span>
+        </div>
+      `).join('') + `
+        <div class="char-card char-card-new" onclick="openModal()">
+          <div class="plus-icon">+</div>
+          <span>Crear personaje</span>
+        </div>
+      `;
+    } catch (e) {
+      grid.innerHTML = `<p style="color:var(--text-muted);padding:20px">Error al cargar personajes: ${e.message}</p>`;
+    }
+  }
+
+  // ─── CREAR PERSONAJE ──────────────────────────────────────
+  async function createCharacter() {
+    const name        = document.getElementById('charName').value.trim();
+    const desc        = document.getElementById('charDesc').value.trim();
+    const tag         = document.getElementById('charTag').value.trim();
+    const personality = document.getElementById('charPersonality').value.trim();
+    const greeting    = document.getElementById('charGreeting').value.trim();
+
+    if (!name)        return alert('El personaje necesita un nombre.');
+    if (!personality) return alert('Escribe la personalidad del personaje.');
+
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    try {
+      const newChar = {
+        id:          generateId(),
+        name,
+        emoji:       selectedEmoji,
+        description: desc || 'Un personaje misterioso.',
+        tag:         tag  || 'Original',
+        personality,
+        greeting:    greeting || `Hola, soy ${name}. ¿En qué puedo ayudarte?`,
+        createdAt:   Date.now()
+      };
+
+      await saveCharacter(currentUid, newChar);
+      closeModal();
+      await renderGrid();
+    } catch (e) {
+      alert('Error al guardar: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Crear personaje';
+    }
+  }
+
+  // ─── ELIMINAR PERSONAJE ───────────────────────────────────
+  async function confirmDelete(id, name) {
+    if (!confirm(`¿Eliminar a ${name}? También se borrará su historial.`)) return;
+    try {
+      await deleteCharacter(currentUid, id);
+      await renderGrid();
+    } catch (e) {
+      alert('Error al eliminar: ' + e.message);
+    }
+  }
+
+  // ─── MODAL ────────────────────────────────────────────────
   function renderEmojiGrid() {
     const grid = document.getElementById('emojiGrid');
     grid.innerHTML = EMOJIS.map(e => `
@@ -105,52 +222,6 @@
     selectedEmoji = EMOJIS[0];
   }
 
-  function createCharacter() {
-    const name = document.getElementById('charName').value.trim();
-    const desc = document.getElementById('charDesc').value.trim();
-    const tag = document.getElementById('charTag').value.trim();
-    const personality = document.getElementById('charPersonality').value.trim();
-    const greeting = document.getElementById('charGreeting').value.trim();
-
-    if (!name) return alert('El personaje necesita un nombre.');
-    if (!personality) return alert('Escribe la personalidad del personaje.');
-
-    const chars = loadCharacters();
-    const newChar = {
-      id: generateId(),
-      name,
-      emoji: selectedEmoji,
-      description: desc || 'Un personaje misterioso.',
-      tag: tag || 'Original',
-      personality,
-      greeting: greeting || `Hola, soy ${name}. ¿En qué puedo ayudarte?`
-    };
-
-    chars.push(newChar);
-    saveCharacters(chars);
-    renderGrid();
-    closeModal();
-  }
-
-  function renderGrid() {
-    const chars = loadCharacters();
-    const grid = document.getElementById('charactersGrid');
-
-    grid.innerHTML = chars.map((c, i) => `
-      <div class="char-card" style="animation-delay:${i * 0.07}s" onclick="goToChat('${c.id}')">
-        <div class="char-avatar">${c.emoji}</div>
-        <div class="char-name">${c.name}</div>
-        <div class="char-desc">${c.description}</div>
-        <span class="char-tag">${c.tag}</span>
-      </div>
-    `).join('') + `
-      <div class="char-card char-card-new" onclick="openModal()">
-        <div class="plus-icon">+</div>
-        <span>Crear personaje</span>
-      </div>
-    `;
-  }
-
   function goToChat(id) {
     window.location.href = `chat.html?id=${id}`;
   }
@@ -159,9 +230,6 @@
   document.getElementById('modalOverlay').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
   });
-
-  // Init
-  renderGrid();
 </script>
 </body>
 </html>
