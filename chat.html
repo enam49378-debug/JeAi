@@ -5,8 +5,106 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JcAi — Chat</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ─── SETUP SCREEN ─── */
+    .setup-screen {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      z-index: 500;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .setup-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      width: 100%; max-width: 500px;
+      animation: fadeUp 0.3s ease;
+    }
+    .setup-box h2 { font-size: 1.4rem; margin-bottom: 8px; }
+    .setup-box p { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 28px; line-height: 1.6; }
+    .api-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 14px;
+    }
+    .api-badge {
+      font-size: 0.75rem; font-weight: 600;
+      padding: 3px 10px; border-radius: 20px;
+      white-space: nowrap; min-width: 90px; text-align: center;
+    }
+    .badge-openrouter { background: rgba(124,106,247,0.15); color: #7c6af7; }
+    .badge-groq       { background: rgba(247,106,138,0.15); color: #f76a8a; }
+    .badge-mistral    { background: rgba(106,200,247,0.15); color: #6ac8f7; }
+    .badge-gemini     { background: rgba(247,200,106,0.15); color: #f7c86a; }
+    .api-row input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 9px 14px;
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .api-row input:focus { border-color: var(--accent); }
+    .api-row input::placeholder { color: var(--text-muted); }
+    .setup-note {
+      font-size: 0.78rem; color: var(--text-muted);
+      margin: 20px 0 24px;
+      padding: 12px 14px;
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--accent);
+      line-height: 1.6;
+    }
+
+    /* API status badge in header */
+    .api-status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #4ade80; display: inline-block; margin-right: 5px;
+    }
+    .api-status-dot.error { background: #f76a8a; }
+    .api-status-dot.loading { background: #f7c86a; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  </style>
 </head>
 <body>
+
+<!-- Pantalla de configuración de keys -->
+<div class="setup-screen" id="setupScreen" style="display:none">
+  <div class="setup-box">
+    <h2>🔑 Configurar APIs</h2>
+    <p>Agrega al menos una key. El sistema intentará en orden hasta encontrar una que funcione. Se guardan solo en tu navegador.</p>
+
+    <div class="api-row">
+      <span class="api-badge badge-openrouter">OpenRouter</span>
+      <input type="password" id="key_openrouter" placeholder="sk-or-..." />
+    </div>
+    <div class="api-row">
+      <span class="api-badge badge-groq">Groq</span>
+      <input type="password" id="key_groq" placeholder="gsk_..." />
+    </div>
+    <div class="api-row">
+      <span class="api-badge badge-mistral">Mistral</span>
+      <input type="password" id="key_mistral" placeholder="..." />
+    </div>
+    <div class="api-row">
+      <span class="api-badge badge-gemini">Gemini</span>
+      <input type="password" id="key_gemini" placeholder="AIza..." />
+    </div>
+
+    <div class="setup-note">
+      🔒 Las keys se guardan en tu navegador (localStorage) y nunca salen de tu dispositivo ni se suben a ningún servidor.
+    </div>
+
+    <div style="display:flex; gap:10px; justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="cancelSetup()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveKeys()">Guardar y continuar</button>
+    </div>
+  </div>
+</div>
 
 <div class="chat-layout">
 
@@ -19,17 +117,18 @@
       <div class="chat-header-status" id="headerStatus">IA activa</div>
     </div>
     <div class="chat-header-actions">
-      <button class="btn btn-ghost" onclick="toggleConsole()" style="font-size:0.8rem">🖥 Consola</button>
-      <button class="btn btn-danger" onclick="confirmClear()">🗑 Limpiar</button>
+      <button class="btn btn-ghost" onclick="openSetup()" style="font-size:0.8rem">🔑 Keys</button>
+      <button class="btn btn-ghost" onclick="toggleConsole()" style="font-size:0.8rem">🖥</button>
+      <button class="btn btn-danger" onclick="confirmClear()">🗑</button>
     </div>
   </header>
 
   <!-- Mensajes -->
   <div class="chat-messages" id="chatMessages"></div>
 
-  <!-- Consola de errores -->
-  <div id="errorConsole" style="display:none; background:#0d0d1a; border-top:1px solid #f76a8a; padding:12px 20px; max-height:150px; overflow-y:auto; font-family:monospace; font-size:0.78rem; color:#f76a8a;">
-    <div style="color:#6b6b80; margin-bottom:6px;">── Consola ──</div>
+  <!-- Consola -->
+  <div id="errorConsole" style="display:none; background:#0d0d1a; border-top:1px solid var(--border); padding:10px 18px; max-height:130px; overflow-y:auto; font-family:monospace; font-size:0.76rem;">
+    <div style="color:var(--text-muted); margin-bottom:4px;">── Consola ──</div>
     <div id="consoleOutput"></div>
   </div>
 
@@ -57,9 +156,56 @@
 
 <script src="characters.js"></script>
 <script>
-  // ─── CONFIG ───────────────────────────────────────────────
-  const GEMINI_KEY = 'AIzaSyDZ35Vshllxa7x98lntloJIjXVBePBDBqk'; // ← pon tu key aquí
-  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+  // ─── KEYS STORAGE ─────────────────────────────────────────
+  const KEYS_STORAGE = 'jcai_api_keys';
+
+  function getKeys() {
+    const raw = localStorage.getItem(KEYS_STORAGE);
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  function saveKeysToStorage(keys) {
+    localStorage.setItem(KEYS_STORAGE, JSON.stringify(keys));
+  }
+
+  function hasAnyKey() {
+    const k = getKeys();
+    return k.openrouter || k.groq || k.mistral || k.gemini;
+  }
+
+  // ─── SETUP UI ─────────────────────────────────────────────
+  function openSetup() {
+    const k = getKeys();
+    if (k.openrouter) document.getElementById('key_openrouter').value = k.openrouter;
+    if (k.groq)       document.getElementById('key_groq').value = k.groq;
+    if (k.mistral)    document.getElementById('key_mistral').value = k.mistral;
+    if (k.gemini)     document.getElementById('key_gemini').value = k.gemini;
+    document.getElementById('setupScreen').style.display = 'flex';
+  }
+
+  function cancelSetup() {
+    document.getElementById('setupScreen').style.display = 'none';
+  }
+
+  function saveKeys() {
+    const keys = {
+      openrouter: document.getElementById('key_openrouter').value.trim(),
+      groq:       document.getElementById('key_groq').value.trim(),
+      mistral:    document.getElementById('key_mistral').value.trim(),
+      gemini:     document.getElementById('key_gemini').value.trim(),
+    };
+    // Limpiar vacíos
+    Object.keys(keys).forEach(k => { if (!keys[k]) delete keys[k]; });
+
+    if (Object.keys(keys).length === 0) {
+      alert('Agrega al menos una key.');
+      return;
+    }
+
+    saveKeysToStorage(keys);
+    document.getElementById('setupScreen').style.display = 'none';
+    logConsole('Keys guardadas ✓', 'ok');
+  }
 
   // ─── ESTADO ───────────────────────────────────────────────
   const params = new URLSearchParams(window.location.search);
@@ -68,16 +214,14 @@
   let messages = [];
   let isLoading = false;
 
-  // ─── CONSOLA VISIBLE ──────────────────────────────────────
+  // ─── CONSOLA ──────────────────────────────────────────────
   function logConsole(msg, type = 'info') {
     const out = document.getElementById('consoleOutput');
     const color = type === 'error' ? '#f76a8a' : type === 'ok' ? '#7c6af7' : '#6b6b80';
     const time = new Date().toLocaleTimeString();
     out.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
     out.scrollTop = out.scrollHeight;
-    if (type === 'error') {
-      document.getElementById('errorConsole').style.display = 'block';
-    }
+    if (type === 'error') document.getElementById('errorConsole').style.display = 'block';
   }
 
   function toggleConsole() {
@@ -104,17 +248,22 @@
     document.getElementById('headerName').textContent = character.name;
 
     messages = loadHistory(charId);
-
     if (messages.length === 0) {
-      const greeting = { role: 'assistant', content: character.greeting };
-      messages.push(greeting);
+      messages.push({ role: 'assistant', content: character.greeting });
       saveHistory(charId, messages);
     }
 
     renderMessages();
     updateMemoryHint();
     scrollToBottom();
-    logConsole('Personaje cargado: ' + character.name, 'ok');
+
+    // Mostrar setup si no hay keys
+    if (!hasAnyKey()) {
+      logConsole('No hay keys configuradas', 'error');
+      openSetup();
+    } else {
+      logConsole('Personaje cargado: ' + character.name, 'ok');
+    }
   }
 
   // ─── RENDER ───────────────────────────────────────────────
@@ -150,9 +299,7 @@
       <div class="msg-avatar">${character.emoji}</div>
       <div class="msg-bubble">
         <div class="typing-indicator">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
+          <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
         </div>
       </div>`;
     container.appendChild(div);
@@ -179,11 +326,13 @@
     }
   }
 
-  // ─── ENVIAR MENSAJE ───────────────────────────────────────
+  // ─── ENVIAR ───────────────────────────────────────────────
   async function sendMessage() {
     const input = document.getElementById('messageInput');
     const text = input.value.trim();
     if (!text || isLoading) return;
+
+    if (!hasAnyKey()) { openSetup(); return; }
 
     const userMsg = { role: 'user', content: text };
     messages.push(userMsg);
@@ -197,75 +346,196 @@
     updateMemoryHint();
 
     try {
-      logConsole('Enviando mensaje a Gemini...');
-      const reply = await callGemini();
+      const reply = await callWithFallback();
       removeTyping();
       const aiMsg = { role: 'assistant', content: reply };
       messages.push(aiMsg);
       saveHistory(charId, messages);
       appendBubble(aiMsg);
       updateMemoryHint();
-      logConsole('Respuesta recibida ✓', 'ok');
     } catch (err) {
       removeTyping();
-      logConsole('ERROR: ' + err.message, 'error');
-      const errMsg = { role: 'assistant', content: `⚠️ Error: ${err.message}` };
-      appendBubble(errMsg);
+      logConsole('Todas las APIs fallaron: ' + err.message, 'error');
+      appendBubble({ role: 'assistant', content: '⚠️ Todas las APIs fallaron. Revisa tus keys en 🔑' });
     }
 
     setLoading(false);
   }
 
-  // ─── LLAMADA A GEMINI ─────────────────────────────────────
-  async function callGemini() {
-    let raw = messages.slice(-MAX_MEMORY);
+  // ─── FALLBACK EN CADENA ───────────────────────────────────
+  async function callWithFallback() {
+    const keys = getKeys();
+    const errors = [];
 
-    // Construir contents alternando roles correctamente
+    // 1. OpenRouter
+    if (keys.openrouter) {
+      try {
+        logConsole('Intentando OpenRouter...');
+        const r = await callOpenRouter(keys.openrouter);
+        logConsole('OpenRouter ✓', 'ok');
+        return r;
+      } catch (e) {
+        logConsole('OpenRouter falló: ' + e.message, 'error');
+        errors.push('OpenRouter: ' + e.message);
+      }
+    }
+
+    // 2. Groq
+    if (keys.groq) {
+      try {
+        logConsole('Intentando Groq...');
+        const r = await callGroq(keys.groq);
+        logConsole('Groq ✓', 'ok');
+        return r;
+      } catch (e) {
+        logConsole('Groq falló: ' + e.message, 'error');
+        errors.push('Groq: ' + e.message);
+      }
+    }
+
+    // 3. Mistral
+    if (keys.mistral) {
+      try {
+        logConsole('Intentando Mistral...');
+        const r = await callMistral(keys.mistral);
+        logConsole('Mistral ✓', 'ok');
+        return r;
+      } catch (e) {
+        logConsole('Mistral falló: ' + e.message, 'error');
+        errors.push('Mistral: ' + e.message);
+      }
+    }
+
+    // 4. Gemini
+    if (keys.gemini) {
+      try {
+        logConsole('Intentando Gemini...');
+        const r = await callGemini(keys.gemini);
+        logConsole('Gemini ✓', 'ok');
+        return r;
+      } catch (e) {
+        logConsole('Gemini falló: ' + e.message, 'error');
+        errors.push('Gemini: ' + e.message);
+      }
+    }
+
+    throw new Error(errors.join(' | '));
+  }
+
+  // ─── HELPER: historial para APIs OpenAI-compatible ────────
+  function buildHistory() {
+    let raw = messages.slice(-MAX_MEMORY);
+    // Asegurar que no haya dos seguidos del mismo rol
+    let clean = [];
+    for (const m of raw) {
+      const role = m.role === 'assistant' ? 'assistant' : 'user';
+      if (clean.length > 0 && clean[clean.length-1].role === role) {
+        clean[clean.length-1].content += '\n' + m.content;
+      } else {
+        clean.push({ role, content: m.content });
+      }
+    }
+    return clean;
+  }
+
+  // ─── OPENROUTER ───────────────────────────────────────────
+  async function callOpenRouter(key) {
+    const msgs = [
+      { role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' },
+      ...buildHistory()
+    ];
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`,
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'JcAi'
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        messages: msgs,
+        max_tokens: 800
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+    return data.choices[0].message.content;
+  }
+
+  // ─── GROQ ─────────────────────────────────────────────────
+  async function callGroq(key) {
+    const msgs = [
+      { role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' },
+      ...buildHistory()
+    ];
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: msgs,
+        max_tokens: 800
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+    return data.choices[0].message.content;
+  }
+
+  // ─── MISTRAL ──────────────────────────────────────────────
+  async function callMistral(key) {
+    const msgs = [
+      { role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' },
+      ...buildHistory()
+    ];
+    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: 'mistral-small-latest',
+        messages: msgs,
+        max_tokens: 800
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+    return data.choices[0].message.content;
+  }
+
+  // ─── GEMINI ───────────────────────────────────────────────
+  async function callGemini(key) {
+    let raw = messages.slice(-MAX_MEMORY);
     let contents = [];
     for (const m of raw) {
       const role = m.role === 'assistant' ? 'model' : 'user';
-      if (contents.length > 0 && contents[contents.length - 1].role === role) {
-        // Fusionar mensajes consecutivos del mismo rol
-        contents[contents.length - 1].parts[0].text += '\n' + m.content;
+      if (contents.length > 0 && contents[contents.length-1].role === role) {
+        contents[contents.length-1].parts[0].text += '\n' + m.content;
       } else {
         contents.push({ role, parts: [{ text: m.content }] });
       }
     }
+    while (contents.length > 0 && contents[0].role === 'model') contents.shift();
+    if (contents.length === 0) throw new Error('Sin mensajes');
 
-    // Gemini no puede empezar con 'model'
-    while (contents.length > 0 && contents[0].role === 'model') {
-      contents.shift();
-    }
-
-    if (contents.length === 0) throw new Error('No hay mensajes para enviar.');
-
-    logConsole(`Historial: ${contents.length} turnos`);
-
-    const body = {
-      system_instruction: {
-        parts: [{ text: character.personality + '\n\nResponde siempre en español a menos que el usuario escriba en otro idioma. Sé fiel a tu personalidad.' }]
-      },
-      contents
-    };
-
-    const response = await fetch(GEMINI_URL, {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' }] },
+        contents
+      })
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      logConsole('Respuesta API: ' + JSON.stringify(data), 'error');
-      throw new Error(data.error?.message || `HTTP ${response.status}`);
-    }
-
-    if (!data.candidates || !data.candidates[0]) {
-      logConsole('Sin candidatos: ' + JSON.stringify(data), 'error');
-      throw new Error('Gemini no devolvió respuesta.');
-    }
-
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+    if (!data.candidates?.[0]) throw new Error('Sin respuesta de Gemini');
     return data.candidates[0].content.parts[0].text;
   }
 
@@ -277,10 +547,7 @@
   }
 
   function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
   function autoResize(el) {
@@ -289,7 +556,7 @@
   }
 
   function confirmClear() {
-    if (confirm(`¿Borrar todo el historial con ${character.name}?`)) {
+    if (confirm(`¿Borrar historial con ${character.name}?`)) {
       messages = [];
       clearHistory(charId);
       messages.push({ role: 'assistant', content: character.greeting });
@@ -309,7 +576,6 @@
       .replace(/\n/g, '<br>');
   }
 
-  // ─── START ────────────────────────────────────────────────
   init();
 </script>
 </body>
