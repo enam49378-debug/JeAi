@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JcAi — Chat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="chat-layout">
+
+  <!-- Header -->
+  <header class="chat-header">
+    <a href="index.html" class="btn btn-ghost" style="padding:8px 12px;">← Volver</a>
+    <div class="chat-header-avatar" id="headerAvatar">?</div>
+    <div class="chat-header-info">
+      <div class="chat-header-name" id="headerName">Cargando...</div>
+      <div class="chat-header-status" id="headerStatus">IA activa</div>
+    </div>
+    <div class="chat-header-actions">
+      <button class="btn btn-danger" onclick="confirmClear()">🗑 Limpiar</button>
+    </div>
+  </header>
+
+  <!-- Mensajes -->
+  <div class="chat-messages" id="chatMessages"></div>
+
+  <!-- Input -->
+  <div class="chat-input-area">
+    <div class="chat-input-row">
+      <textarea
+        id="messageInput"
+        placeholder="Escribe algo..."
+        rows="1"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+    <div class="memory-hint" id="memoryHint"></div>
+  </div>
+
+</div>
+
+<script src="characters.js"></script>
+<script>
+  // ─── ESTADO ───────────────────────────────────────────────
+  const params = new URLSearchParams(window.location.search);
+  const charId = params.get('id');
+  let character = null;
+  let messages = []; // historial local {role, content}
+  let isLoading = false;
+
+  // ─── INIT ─────────────────────────────────────────────────
+  function init() {
+    const chars = loadCharacters();
+    character = chars.find(c => c.id === charId);
+
+    if (!character) {
+      document.getElementById('chatMessages').innerHTML = `
+        <div class="empty-state">
+          <div class="big-emoji">😕</div>
+          <p>Personaje no encontrado. <a href="index.html" style="color:var(--accent)">Volver</a></p>
+        </div>`;
+      return;
+    }
+
+    document.title = `JcAi — ${character.name}`;
+    document.getElementById('headerAvatar').textContent = character.emoji;
+    document.getElementById('headerName').textContent = character.name;
+
+    // Cargar historial guardado
+    messages = loadHistory(charId);
+
+    if (messages.length === 0) {
+      // Primer saludo
+      const greeting = { role: 'assistant', content: character.greeting };
+      messages.push(greeting);
+      saveHistory(charId, messages);
+    }
+
+    renderMessages();
+    updateMemoryHint();
+    scrollToBottom();
+  }
+
+  // ─── RENDER ───────────────────────────────────────────────
+  function renderMessages() {
+    const container = document.getElementById('chatMessages');
+    container.innerHTML = messages.map(m => buildBubble(m)).join('');
+  }
+
+  function buildBubble(msg) {
+    const isUser = msg.role === 'user';
+    const avatar = isUser ? '👤' : character.emoji;
+    return `
+      <div class="message ${isUser ? 'user' : 'ai'}">
+        <div class="msg-avatar">${avatar}</div>
+        <div class="msg-bubble">${escapeHtml(msg.content)}</div>
+      </div>`;
+  }
+
+  function appendBubble(msg) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.innerHTML = buildBubble(msg);
+    container.appendChild(div.firstElementChild);
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.id = 'typingIndicator';
+    div.className = 'message ai';
+    div.innerHTML = `
+      <div class="msg-avatar">${character.emoji}</div>
+      <div class="msg-bubble">
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>`;
+    container.appendChild(div);
+    scrollToBottom();
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  function scrollToBottom() {
+    const c = document.getElementById('chatMessages');
+    setTimeout(() => c.scrollTop = c.scrollHeight, 50);
+  }
+
+  function updateMemoryHint() {
+    const count = messages.length;
+    const hint = document.getElementById('memoryHint');
+    if (count >= MAX_MEMORY - 5) {
+      hint.textContent = `Memoria: ${count}/${MAX_MEMORY} mensajes — los más antiguos se irán borrando.`;
+    } else {
+      hint.textContent = `Memoria activa: ${count} mensajes`;
+    }
+  }
+
+  // ─── ENVIAR MENSAJE ───────────────────────────────────────
+  async function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const text = input.value.trim();
+    if (!text || isLoading) return;
+
+    // Agregar mensaje del usuario
+    const userMsg = { role: 'user', content: text };
+    messages.push(userMsg);
+    saveHistory(charId, messages);
+    appendBubble(userMsg);
+
+    input.value = '';
+    input.style.height = 'auto';
+    setLoading(true);
+    showTyping();
+    updateMemoryHint();
+
+    try {
+      const reply = await callClaude(text);
+      removeTyping();
+      const aiMsg = { role: 'assistant', content: reply };
+      messages.push(aiMsg);
+      saveHistory(charId, messages);
+      appendBubble(aiMsg);
+      updateMemoryHint();
+    } catch (err) {
+      removeTyping();
+      const errMsg = { role: 'assistant', content: '⚠️ Ocurrió un error al responder. Intenta de nuevo.' };
+      appendBubble(errMsg);
+      console.error(err);
+    }
+
+    setLoading(false);
+  }
+
+  // ─── LLAMADA A LA API ─────────────────────────────────────
+  async function callClaude(userText) {
+    // Construir historial para la API (últimos MAX_MEMORY mensajes)
+    const apiMessages = messages
+      .slice(-MAX_MEMORY)
+      .map(m => ({ role: m.role, content: m.content }));
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: character.personality + '\n\nResponde siempre en español a menos que el usuario escriba en otro idioma. Sé fiel a tu personalidad en cada respuesta.',
+        messages: apiMessages
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error?.message || 'API error');
+    }
+
+    const data = await response.json();
+    return data.content[0].text;
+  }
+
+  // ─── UI HELPERS ───────────────────────────────────────────
+  function setLoading(val) {
+    isLoading = val;
+    document.getElementById('sendBtn').disabled = val;
+    document.getElementById('headerStatus').textContent = val ? 'Escribiendo...' : 'IA activa';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  function confirmClear() {
+    if (confirm(`¿Borrar todo el historial con ${character.name}?`)) {
+      messages = [];
+      clearHistory(charId);
+      // Volver a poner el saludo
+      messages.push({ role: 'assistant', content: character.greeting });
+      saveHistory(charId, messages);
+      renderMessages();
+      updateMemoryHint();
+      scrollToBottom();
+    }
+  }
+
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  // ─── START ────────────────────────────────────────────────
+  init();
+</script>
+</body>
+</html>
