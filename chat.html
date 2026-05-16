@@ -142,6 +142,13 @@
       <div class="chat-header-name" id="headerName">Cargando...</div>
       <div class="chat-header-status" id="headerStatus">IA activa</div>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:center">
+      <button class="streak-badge" id="streakBadge" onclick="toggleStreak()" title="Click para activar/desactivar comentarios de racha">
+        <span class="streak-fire">🔥</span>
+        <span class="streak-num" id="streakNum">0</span>
+        <span style="font-size:0.7em;opacity:0.7">días</span>
+      </button>
+    </div>
     <div class="chat-header-actions">
       <button class="btn btn-ghost" onclick="openSetup()" style="font-size:0.8rem">🔑 Keys</button>
       <button class="btn btn-ghost" onclick="toggleConsole()" style="font-size:0.8rem">🖥</button>
