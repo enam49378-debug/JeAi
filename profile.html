@@ -7,151 +7,144 @@
   <link rel="stylesheet" href="style.css" />
   <style>
     .profile-layout {
-      max-width: 560px;
+      max-width: 580px;
       margin: 0 auto;
-      padding: 40px 24px 80px;
+      padding: 36px 22px 80px;
     }
 
-    .profile-back {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--text-muted);
-      font-size: 0.88rem;
-      margin-bottom: 32px;
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-    .profile-back:hover { color: var(--accent); }
-
+    /* ─── AVATAR SECTION ─── */
     .profile-avatar-section {
       display: flex;
       align-items: center;
-      gap: 24px;
-      margin-bottom: 36px;
-      padding: 24px;
+      gap: 22px;
+      margin-bottom: 30px;
+      padding: 22px 24px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
     }
-
     .profile-avatar-big {
-      width: 80px; height: 80px;
+      width: 78px; height: 78px;
       border-radius: 50%;
       background: var(--surface2);
       border: 2px solid var(--border);
       display: flex; align-items: center; justify-content: center;
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--accent);
-      flex-shrink: 0;
-      overflow: hidden;
-      background-size: cover;
-      background-position: center;
+      font-size: 2rem; font-weight: 700; color: var(--accent);
+      flex-shrink: 0; overflow: hidden;
+      background-size: cover; background-position: center;
+      cursor: pointer;
+      position: relative;
+      transition: opacity 0.2s;
     }
+    .profile-avatar-big:hover { opacity: 0.8; }
+    .profile-avatar-big .avatar-edit-hint {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; border-radius: 50%;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .profile-avatar-big:hover .avatar-edit-hint { opacity: 1; }
+    .profile-avatar-info h3 { font-size: 1.1rem; margin-bottom: 4px; }
+    .profile-avatar-info p  { font-size: 0.84rem; color: var(--text-muted); }
 
-    .profile-avatar-info h3 {
-      font-size: 1.1rem;
-      margin-bottom: 4px;
-    }
-    .profile-avatar-info p {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-
-    .profile-card {
+    /* ─── TABS ─── */
+    .profile-tabs {
+      display: flex;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-      margin-bottom: 20px;
-    }
-
-    .profile-card h3 {
-      font-size: 0.95rem;
-      font-weight: 700;
-      margin-bottom: 20px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-size: 0.78rem;
-    }
-
-    .profile-field {
-      margin-bottom: 16px;
-    }
-    .profile-field label {
-      display: block;
-      font-size: 0.83rem;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-      font-weight: 500;
-    }
-    .profile-field input {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
       border-radius: var(--radius-sm);
-      padding: 10px 14px;
-      color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 0.9rem;
-      outline: none;
+      padding: 4px;
+      margin-bottom: 20px;
+      gap: 4px;
+    }
+    .profile-tab {
+      flex: 1; padding: 9px 12px;
+      border-radius: 6px;
+      background: transparent; border: none;
+      color: var(--text-muted);
+      font-family: 'DM Sans', sans-serif; font-size: 0.86rem; font-weight: 500;
+      cursor: pointer; transition: all 0.18s;
+    }
+    .profile-tab.active { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+    /* ─── CARDS ─── */
+    .profile-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 26px; margin-bottom: 18px;
+    }
+    .profile-card h3 {
+      font-size: 0.76rem; font-weight: 700; margin-bottom: 18px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+      color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .profile-field { margin-bottom: 14px; }
+    .profile-field label { display: block; font-size: 0.82rem; color: var(--text-muted); margin-bottom: 5px; font-weight: 500; }
+    .profile-field input,
+    .profile-field textarea,
+    .profile-field select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 9px 13px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 0.88rem; outline: none;
       transition: border-color 0.2s;
     }
-    .profile-field input:focus { border-color: var(--accent); }
-    .profile-field input:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    .profile-field .field-hint {
-      font-size: 0.76rem;
-      color: var(--text-muted);
-      margin-top: 5px;
-    }
+    .profile-field input:focus,
+    .profile-field textarea:focus,
+    .profile-field select:focus { border-color: var(--accent); }
+    .profile-field input:disabled { opacity: 0.5; cursor: not-allowed; }
+    .profile-field textarea { resize: vertical; min-height: 80px; }
+    .profile-field .field-hint { font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; }
 
-    .profile-save-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 20px;
-    }
+    .profile-save-row { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+    .profile-success { font-size: 0.82rem; color: #4ade80; display: none; }
+    .profile-error-msg { font-size: 0.82rem; color: var(--accent2); display: none; }
 
-    .profile-success {
-      font-size: 0.83rem;
-      color: #4ade80;
-      display: none;
-    }
-    .profile-error-msg {
-      font-size: 0.83rem;
-      color: var(--accent2);
-      display: none;
-    }
-
-    .danger-zone {
-      border-color: rgba(247,106,138,0.3);
-    }
+    .danger-zone { border-color: rgba(247,106,138,0.3); }
     .danger-zone h3 { color: var(--accent2); }
 
     .provider-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-size: 0.78rem;
-      font-weight: 500;
-      border: 1px solid var(--border);
-      background: var(--surface2);
-      color: var(--text-muted);
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 11px; border-radius: 20px; font-size: 0.76rem; font-weight: 500;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted);
     }
+
+    /* ─── PERSONA CARD (Mi Personaje) ─── */
+    .persona-preview {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 18px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .persona-preview-avatar {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem; overflow: hidden;
+      background-size: cover; background-position: center;
+      flex-shrink: 0; cursor: pointer; transition: opacity 0.2s;
+      position: relative;
+    }
+    .persona-preview-avatar:hover { opacity: 0.8; }
+    .persona-preview-info { flex: 1; }
+    .persona-preview-name { font-weight: 700; font-size: 1rem; margin-bottom: 3px; }
+    .persona-preview-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; }
+
+    .field-row { display: flex; gap: 12px; }
+    .field-row .profile-field { flex: 1; }
+
+    /* tab panels */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
   </style>
 </head>
 <body>
 
-<!-- ─── AUTH OVERLAY ─── -->
 <div class="auth-overlay" id="authOverlay"></div>
 
 <nav>
@@ -165,7 +158,10 @@
 
   <!-- Avatar section -->
   <div class="profile-avatar-section">
-    <div class="profile-avatar-big" id="profileAvatarBig"></div>
+    <div class="profile-avatar-big" id="profileAvatarBig" onclick="document.getElementById('profileImgInput').click()" title="Cambiar foto">
+      <div class="avatar-edit-hint">📷</div>
+    </div>
+    <input type="file" id="profileImgInput" accept="image/*" style="display:none" onchange="handleProfileImageUpload(event)" />
     <div class="profile-avatar-info">
       <h3 id="profileDisplayName">Cargando...</h3>
       <p id="profileEmail"></p>
@@ -175,182 +171,370 @@
     </div>
   </div>
 
-  <!-- Editar perfil -->
-  <div class="profile-card">
-    <h3>Información del perfil</h3>
-
-    <div class="profile-field">
-      <label>Nombre de usuario</label>
-      <input type="text" id="inputName" placeholder="Tu nombre..." maxlength="40" />
-    </div>
-
-    <div class="profile-field">
-      <label>URL de foto de perfil</label>
-      <input type="url" id="inputPhoto" placeholder="https://..." />
-      <div class="field-hint">Pega la URL de cualquier imagen de internet.</div>
-    </div>
-
-    <div class="profile-save-row">
-      <button class="btn btn-primary" id="saveBtn" onclick="saveProfile()">Guardar cambios</button>
-      <span class="profile-success" id="successMsg">✓ Guardado</span>
-      <span class="profile-error-msg" id="errorMsg"></span>
-    </div>
+  <!-- Tabs -->
+  <div class="profile-tabs">
+    <button class="profile-tab active" onclick="switchTab('cuenta')">👤 Mi cuenta</button>
+    <button class="profile-tab" onclick="switchTab('personaje')">🎭 Mi personaje</button>
   </div>
 
-  <!-- Cambiar contraseña (solo email) -->
-  <div class="profile-card" id="passwordCard" style="display:none">
-    <h3>Cambiar contraseña</h3>
+  <!-- ═══ TAB: CUENTA ═══ -->
+  <div class="tab-panel active" id="tab-cuenta">
 
-    <div class="profile-field">
-      <label>Nueva contraseña</label>
-      <input type="password" id="inputNewPass" placeholder="Mínimo 6 caracteres" />
+    <div class="profile-card">
+      <h3>Información del perfil</h3>
+      <div class="profile-field">
+        <label>Nombre de usuario</label>
+        <input type="text" id="inputName" placeholder="Tu nombre..." maxlength="40" />
+      </div>
+      <div class="profile-field">
+        <label>Foto de perfil</label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-ghost" style="font-size:0.8rem;padding:7px 12px" onclick="document.getElementById('profileImgInput').click()">📷 Subir imagen</button>
+          <span style="font-size:0.78rem;color:var(--text-muted)" id="photoFileName">Sin imagen subida</span>
+        </div>
+        <div class="field-hint">O pega una URL directamente:</div>
+        <input type="url" id="inputPhoto" placeholder="https://..." oninput="previewPhotoFromUrl()" style="margin-top:6px" />
+      </div>
+      <div class="profile-save-row">
+        <button class="btn btn-primary" id="saveBtn" onclick="saveProfile()">Guardar cambios</button>
+        <span class="profile-success" id="successMsg">✓ Guardado</span>
+        <span class="profile-error-msg" id="errorMsg"></span>
+      </div>
     </div>
 
-    <div class="profile-save-row">
-      <button class="btn btn-ghost" onclick="changePassword()">Actualizar contraseña</button>
-      <span class="profile-success" id="passSuccessMsg">✓ Contraseña actualizada</span>
-      <span class="profile-error-msg" id="passErrorMsg"></span>
+    <div class="profile-card" id="passwordCard" style="display:none">
+      <h3>Cambiar contraseña</h3>
+      <div class="profile-field">
+        <label>Nueva contraseña</label>
+        <input type="password" id="inputNewPass" placeholder="Mínimo 6 caracteres" />
+      </div>
+      <div class="profile-save-row">
+        <button class="btn btn-ghost" onclick="changePassword()">Actualizar contraseña</button>
+        <span class="profile-success" id="passSuccessMsg">✓ Contraseña actualizada</span>
+        <span class="profile-error-msg" id="passErrorMsg"></span>
+      </div>
     </div>
+
+    <div class="profile-card danger-zone">
+      <h3>Zona de peligro</h3>
+      <p style="font-size:0.84rem;color:var(--text-muted);margin-bottom:14px;line-height:1.6">Cerrar sesión te desconecta de este dispositivo. Tus personajes seguirán guardados en la nube.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="logOut().then(()=>window.location.href='index.html')">Cerrar sesión</button>
+        <button class="btn btn-danger" onclick="confirmDeleteAccount()">Eliminar cuenta</button>
+      </div>
+    </div>
+
   </div>
 
-  <!-- Zona de peligro -->
-  <div class="profile-card danger-zone">
-    <h3>Zona de peligro</h3>
-    <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:16px; line-height:1.6">
-      Cerrar sesión te desconecta de este dispositivo. Tus personajes seguirán guardados en la nube.
-    </p>
-    <div style="display:flex; gap:10px; flex-wrap:wrap">
-      <button class="btn btn-ghost" onclick="logOut().then(() => window.location.href='index.html')">Cerrar sesión</button>
-      <button class="btn btn-danger" onclick="confirmDeleteAccount()">Eliminar cuenta</button>
+  <!-- ═══ TAB: MI PERSONAJE ═══ -->
+  <div class="tab-panel" id="tab-personaje">
+
+    <div class="profile-card">
+      <h3>¿Cómo te ven los bots?</h3>
+      <p style="font-size:0.83rem;color:var(--text-muted);margin-bottom:20px;line-height:1.6">
+        Define tu personaje para que los bots te conozcan mejor y personalicen sus respuestas hacia ti.
+      </p>
+
+      <!-- Preview card -->
+      <div class="persona-preview" id="personaPreview">
+        <div class="persona-preview-avatar" id="personaAvatarPreview" onclick="document.getElementById('personaImgInput').click()" title="Cambiar foto">👤</div>
+        <input type="file" id="personaImgInput" accept="image/*" style="display:none" onchange="handlePersonaImageUpload(event)" />
+        <div class="persona-preview-info">
+          <div class="persona-preview-name" id="personaPreviewName">Tu nombre aquí</div>
+          <div class="persona-preview-desc" id="personaPreviewDesc">Completa los campos de abajo para que los bots te conozcan.</div>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="profile-field">
+          <label>Tu nombre</label>
+          <input type="text" id="personaName" placeholder="Ej: Jesus" maxlength="30" oninput="updatePersonaPreview()" />
+        </div>
+        <div class="profile-field">
+          <label>Género</label>
+          <select id="personaGender" onchange="updatePersonaPreview()">
+            <option value="">Sin especificar</option>
+            <option value="hombre">Hombre</option>
+            <option value="mujer">Mujer</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="profile-field">
+          <label>Color favorito</label>
+          <input type="text" id="personaColor" placeholder="Ej: Amarillo" maxlength="30" oninput="updatePersonaPreview()" />
+        </div>
+        <div class="profile-field">
+          <label>Humor</label>
+          <input type="text" id="personaHumor" placeholder="Ej: negro, absurdo, sarcástico..." maxlength="40" oninput="updatePersonaPreview()" />
+        </div>
+      </div>
+
+      <div class="profile-field">
+        <label>Hobbies / Tiempo libre</label>
+        <input type="text" id="personaHobbies" placeholder="Ej: jugar videojuegos, escuchar música..." maxlength="100" oninput="updatePersonaPreview()" />
+      </div>
+
+      <div class="profile-field">
+        <label>Personalidad</label>
+        <input type="text" id="personaPersonality" placeholder="Ej: tranquila y divertida, amable..." maxlength="80" oninput="updatePersonaPreview()" />
+      </div>
+
+      <div class="profile-field">
+        <label>Sobre ti (descripción libre)</label>
+        <textarea id="personaBio" placeholder="Cuéntale a los bots lo que quieras que sepan de ti..." maxlength="400" oninput="updatePersonaPreview()"></textarea>
+        <div class="field-hint">Esta info se incluye en el contexto de cada chat para que el bot te conozca.</div>
+      </div>
+
+      <div class="profile-save-row">
+        <button class="btn btn-primary" onclick="savePersona()">Guardar mi personaje</button>
+        <span class="profile-success" id="personaSuccessMsg">✓ Guardado</span>
+        <span class="profile-error-msg" id="personaErrorMsg"></span>
+      </div>
     </div>
+
   </div>
 
 </div>
 
-<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-
 <script src="firebase-config.js"></script>
 <script src="characters.js"></script>
 <script src="auth.js"></script>
 
 <script>
+  let uploadedProfilePhotoData = null; // base64 from file upload
+
+  // ─── TABS ─────────────────────────────────────────────────
+  function switchTab(tab) {
+    document.querySelectorAll('.profile-tab').forEach((b, i) => {
+      const tabs = ['cuenta','personaje'];
+      b.classList.toggle('active', tabs[i] === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-'+tab).classList.add('active');
+  }
+
+  // ─── AUTH CALLBACK ────────────────────────────────────────
   function onUserAuthenticated(user) {
     renderProfile(user);
+    loadPersona();
   }
 
   function renderProfile(user) {
-    // Avatar
     const avatarEl = document.getElementById('profileAvatarBig');
     if (user.photoURL) {
       avatarEl.style.backgroundImage = `url(${user.photoURL})`;
+      avatarEl.style.backgroundSize = 'cover'; avatarEl.style.backgroundPosition = 'center';
     } else {
       avatarEl.textContent = (user.displayName || user.email || '?')[0].toUpperCase();
     }
-
     document.getElementById('profileDisplayName').textContent = user.displayName || '(sin nombre)';
     document.getElementById('profileEmail').textContent = user.email || '';
-
-    // Prellenar campos
     document.getElementById('inputName').value  = user.displayName || '';
     document.getElementById('inputPhoto').value = user.photoURL    || '';
 
-    // Proveedor
     const providerId = user.providerData[0]?.providerId || '';
     const badge      = document.getElementById('providerBadge');
-    if (providerId === 'google.com') {
-      badge.innerHTML = '🔵 Cuenta Google';
-    } else if (providerId === 'password') {
-      badge.innerHTML = '✉️ Correo y contraseña';
-      document.getElementById('passwordCard').style.display = 'block';
-    } else {
-      badge.textContent = providerId;
+    if      (providerId === 'google.com') badge.innerHTML = '🔵 Cuenta Google';
+    else if (providerId === 'password')   { badge.innerHTML = '✉️ Correo y contraseña'; document.getElementById('passwordCard').style.display = 'block'; }
+    else badge.textContent = providerId;
+  }
+
+  // ─── PROFILE IMAGE UPLOAD ────────────────────────────────
+  function handleProfileImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 300; let w=img.width, h=img.height;
+        if (w>h){h=h*MAX/w;w=MAX;}else{w=w*MAX/h;h=MAX;}
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        uploadedProfilePhotoData = canvas.toDataURL('image/jpeg',0.8);
+        const avatarEl = document.getElementById('profileAvatarBig');
+        avatarEl.style.backgroundImage = `url(${uploadedProfilePhotoData})`;
+        avatarEl.style.backgroundSize = 'cover'; avatarEl.style.backgroundPosition = 'center';
+        avatarEl.innerHTML = '<div class="avatar-edit-hint">📷</div>';
+        document.getElementById('photoFileName').textContent = file.name;
+        document.getElementById('inputPhoto').value = '';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function previewPhotoFromUrl() {
+    const url = document.getElementById('inputPhoto').value.trim();
+    const avatarEl = document.getElementById('profileAvatarBig');
+    if (url) {
+      avatarEl.style.backgroundImage = `url(${url})`;
+      avatarEl.style.backgroundSize = 'cover'; avatarEl.style.backgroundPosition = 'center';
+      avatarEl.innerHTML = '<div class="avatar-edit-hint">📷</div>';
+      uploadedProfilePhotoData = null;
+      document.getElementById('photoFileName').textContent = 'URL de imagen';
     }
   }
 
+  // ─── SAVE PROFILE ─────────────────────────────────────────
   async function saveProfile() {
     const name  = document.getElementById('inputName').value.trim();
-    const photo = document.getElementById('inputPhoto').value.trim();
-    const btn   = document.getElementById('saveBtn');
-    const ok    = document.getElementById('successMsg');
-    const err   = document.getElementById('errorMsg');
-
-    ok.style.display  = 'none';
-    err.style.display = 'none';
-    btn.disabled = true;
-    btn.textContent = 'Guardando...';
+    const urlInput = document.getElementById('inputPhoto').value.trim();
+    const photo = uploadedProfilePhotoData || urlInput || null;
+    const btn = document.getElementById('saveBtn');
+    const ok  = document.getElementById('successMsg');
+    const err = document.getElementById('errorMsg');
+    ok.style.display = 'none'; err.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Guardando...';
 
     try {
-      await auth.currentUser.updateProfile({
-        displayName: name  || null,
-        photoURL:    photo || null
-      });
+      // Firebase profile update (accepts URLs; for base64 store in localStorage as extra)
+      const profilePhoto = urlInput || auth.currentUser.photoURL || null;
+      await auth.currentUser.updateProfile({ displayName: name || null, photoURL: profilePhoto });
 
-      // Refrescar vista
+      // Store base64 locally for immediate use in chat
+      if (uploadedProfilePhotoData) {
+        localStorage.setItem('jcai_profile_photo', uploadedProfilePhotoData);
+      }
+
       renderProfile(auth.currentUser);
       ok.style.display = 'inline';
       setTimeout(() => ok.style.display = 'none', 3000);
     } catch (e) {
-      err.textContent   = 'Error: ' + e.message;
-      err.style.display = 'inline';
+      err.textContent = 'Error: ' + e.message; err.style.display = 'inline';
     } finally {
-      btn.disabled    = false;
-      btn.textContent = 'Guardar cambios';
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
     }
   }
 
   async function changePassword() {
     const newPass = document.getElementById('inputNewPass').value;
-    const ok      = document.getElementById('passSuccessMsg');
-    const err     = document.getElementById('passErrorMsg');
-
-    ok.style.display  = 'none';
-    err.style.display = 'none';
-
-    if (!newPass || newPass.length < 6) {
-      err.textContent   = 'La contraseña debe tener al menos 6 caracteres.';
-      err.style.display = 'inline';
-      return;
-    }
-
+    const ok = document.getElementById('passSuccessMsg');
+    const err = document.getElementById('passErrorMsg');
+    ok.style.display = 'none'; err.style.display = 'none';
+    if (!newPass || newPass.length < 6) { err.textContent = 'La contraseña debe tener al menos 6 caracteres.'; err.style.display = 'inline'; return; }
     try {
       await auth.currentUser.updatePassword(newPass);
       document.getElementById('inputNewPass').value = '';
-      ok.style.display = 'inline';
-      setTimeout(() => ok.style.display = 'none', 3000);
+      ok.style.display = 'inline'; setTimeout(() => ok.style.display = 'none', 3000);
     } catch (e) {
-      if (e.code === 'auth/requires-recent-login') {
-        err.textContent = 'Por seguridad, cierra sesión y vuelve a iniciarla antes de cambiar la contraseña.';
-      } else {
-        err.textContent = 'Error: ' + e.message;
-      }
+      err.textContent = e.code === 'auth/requires-recent-login'
+        ? 'Por seguridad, cierra sesión y vuelve a iniciarla antes de cambiar la contraseña.'
+        : 'Error: ' + e.message;
       err.style.display = 'inline';
     }
   }
 
   async function confirmDeleteAccount() {
-    if (!confirm('¿Eliminar tu cuenta? Se borrarán todos tus personajes e historial. Esta acción no se puede deshacer.')) return;
+    if (!confirm('¿Eliminar tu cuenta? Se borrarán todos tus personajes e historial.')) return;
     if (!confirm('¿Estás seguro? Esta acción es permanente.')) return;
-
     try {
-      // Borrar datos de Firestore
       const uid  = currentUid;
       const snap = await db.collection('users').doc(uid).collection('characters').get();
       const batch = db.batch();
       snap.docs.forEach(d => batch.delete(d.ref));
       await batch.commit();
-
       await auth.currentUser.delete();
       window.location.href = 'index.html';
     } catch (e) {
-      if (e.code === 'auth/requires-recent-login') {
-        alert('Por seguridad, cierra sesión y vuelve a iniciarla antes de eliminar tu cuenta.');
-      } else {
-        alert('Error: ' + e.message);
-      }
+      alert(e.code === 'auth/requires-recent-login'
+        ? 'Por seguridad, cierra sesión y vuelve a iniciarla antes de eliminar tu cuenta.'
+        : 'Error: ' + e.message);
     }
+  }
+
+  // ─── PERSONA ──────────────────────────────────────────────
+  const PERSONA_KEY = 'jcai_user_persona';
+
+  function loadPersona() {
+    const raw = localStorage.getItem(PERSONA_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    if (p.name)        document.getElementById('personaName').value = p.name;
+    if (p.gender)      document.getElementById('personaGender').value = p.gender;
+    if (p.favColor)    document.getElementById('personaColor').value = p.favColor;
+    if (p.humor)       document.getElementById('personaHumor').value = p.humor;
+    if (p.hobbies)     document.getElementById('personaHobbies').value = p.hobbies;
+    if (p.personality) document.getElementById('personaPersonality').value = p.personality;
+    if (p.bio)         document.getElementById('personaBio').value = p.bio;
+    if (p.photoData) {
+      const av = document.getElementById('personaAvatarPreview');
+      av.style.backgroundImage = `url(${p.photoData})`;
+      av.style.backgroundSize = 'cover'; av.style.backgroundPosition = 'center'; av.textContent = '';
+    }
+    updatePersonaPreview();
+  }
+
+  function savePersona() {
+    const persona = {
+      name:        document.getElementById('personaName').value.trim(),
+      gender:      document.getElementById('personaGender').value,
+      favColor:    document.getElementById('personaColor').value.trim(),
+      humor:       document.getElementById('personaHumor').value.trim(),
+      hobbies:     document.getElementById('personaHobbies').value.trim(),
+      personality: document.getElementById('personaPersonality').value.trim(),
+      bio:         document.getElementById('personaBio').value.trim(),
+      photoData:   personaPhotoData || null,
+    };
+    localStorage.setItem(PERSONA_KEY, JSON.stringify(persona));
+    const ok = document.getElementById('personaSuccessMsg');
+    ok.style.display = 'inline';
+    setTimeout(() => ok.style.display = 'none', 3000);
+    updatePersonaPreview();
+  }
+
+  function updatePersonaPreview() {
+    const name  = document.getElementById('personaName').value.trim() || 'Tu nombre aquí';
+    const color = document.getElementById('personaColor').value.trim();
+    const humor = document.getElementById('personaHumor').value.trim();
+    const hob   = document.getElementById('personaHobbies').value.trim();
+    const per   = document.getElementById('personaPersonality').value.trim();
+    const bio   = document.getElementById('personaBio').value.trim();
+
+    document.getElementById('personaPreviewName').textContent = name;
+
+    const parts = [];
+    if (color) parts.push(`Color favorito: ${color}`);
+    if (humor) parts.push(`Humor: ${humor}`);
+    if (hob)   parts.push(`Hobbies: ${hob}`);
+    if (per)   parts.push(`Personalidad: ${per}`);
+    if (bio)   parts.push(bio);
+
+    document.getElementById('personaPreviewDesc').textContent = parts.length
+      ? parts.join(' · ')
+      : 'Completa los campos de abajo para que los bots te conozcan.';
+  }
+
+  // ─── PERSONA PHOTO ────────────────────────────────────────
+  let personaPhotoData = null;
+
+  function handlePersonaImageUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 200; let w=img.width, h=img.height;
+        if (w>h){h=h*MAX/w;w=MAX;}else{w=w*MAX/h;h=MAX;}
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        personaPhotoData = canvas.toDataURL('image/jpeg',0.8);
+        const av = document.getElementById('personaAvatarPreview');
+        av.style.backgroundImage = `url(${personaPhotoData})`;
+        av.style.backgroundSize = 'cover'; av.style.backgroundPosition = 'center'; av.textContent = '';
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   }
 </script>
 </body>
