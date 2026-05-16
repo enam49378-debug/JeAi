@@ -534,6 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ─── STATE ──────────────────────────────────────────────────────────────────
 const params      = new URLSearchParams(window.location.search);
 const charId      = params.get('id');
+const ownerParam  = params.get('owner'); // set when viewing a shared bot
 let character     = null;
 let messages      = [];
 let isLoading     = false;
@@ -729,12 +730,22 @@ function toggleConsole() { const c=document.getElementById('errorConsole'); c.st
 function onUserAuthenticated(user) { loadKeysFromCloud().then(() => init()); }
 
 async function init() {
-  try { const chars = await loadCharacters(currentUid); character = chars.find(c => c.id === charId); }
-  catch (e) { logConsole('Error cargando personajes: '+e.message, 'error'); }
+  try {
+    // If shared bot, load from owner's collection; otherwise from own
+    const sourceUid = ownerParam || currentUid;
+    const chars = await loadCharacters(sourceUid);
+    character = chars.find(c => c.id === charId);
+  } catch (e) { logConsole('Error cargando personajes: '+e.message, 'error'); }
 
   if (!character) {
     document.getElementById('chatMessages').innerHTML = '<div class="empty-state"><div class="big-emoji">😕</div><p>Personaje no encontrado. <a href="index.html" style="color:var(--accent)">Volver</a></p></div>';
     return;
+  }
+
+  // If shared bot, show a subtle "shared" indicator in header
+  if (ownerParam) {
+    const statusEl = document.getElementById('headerStatus');
+    if (statusEl) statusEl.textContent = '🔗 Bot compartido • IA activa';
   }
 
   document.title = 'JcAi — ' + character.name;
