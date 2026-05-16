@@ -340,7 +340,15 @@
     }
 
     document.title = `JcAi — ${character.name}`;
-    document.getElementById('headerAvatar').textContent = character.emoji;
+    const avatarEl = document.getElementById('headerAvatar');
+    if (character.imageUrl) {
+      avatarEl.style.backgroundImage = `url(${character.imageUrl})`;
+      avatarEl.style.backgroundSize = 'cover';
+      avatarEl.style.backgroundPosition = 'center';
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.textContent = character.emoji || '🤖';
+    }
     document.getElementById('headerName').textContent   = character.name;
 
     try {
@@ -375,10 +383,17 @@
 
   function buildBubble(msg) {
     const isUser = msg.role === 'user';
-    const avatar = isUser ? '👤' : character.emoji;
+    let avatarHtml;
+    if (isUser) {
+      avatarHtml = `<div class="msg-avatar">👤</div>`;
+    } else if (character.imageUrl) {
+      avatarHtml = `<div class="msg-avatar" style="background-image:url(${character.imageUrl});background-size:cover;background-position:center;font-size:0"></div>`;
+    } else {
+      avatarHtml = `<div class="msg-avatar">${character.emoji || '🤖'}</div>`;
+    }
     return `
       <div class="message ${isUser ? 'user' : 'ai'}">
-        <div class="msg-avatar">${avatar}</div>
+        ${avatarHtml}
         <div class="msg-bubble">${escapeHtml(msg.content)}</div>
       </div>`;
   }
@@ -396,8 +411,11 @@
     const div = document.createElement('div');
     div.id = 'typingIndicator';
     div.className = 'message ai';
+    const avatarStyle = character.imageUrl
+      ? `style="background-image:url(${character.imageUrl});background-size:cover;background-position:center;font-size:0"`
+      : '';
     div.innerHTML = `
-      <div class="msg-avatar">${character.emoji}</div>
+      <div class="msg-avatar" ${avatarStyle}>${character.imageUrl ? '' : (character.emoji||'🤖')}</div>
       <div class="msg-bubble">
         <div class="typing-indicator">
           <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
