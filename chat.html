@@ -321,7 +321,7 @@
     <div class="api-row"><span class="api-badge badge-groq">Groq</span><input type="password" id="key_groq" placeholder="gsk_..." /></div>
     <div class="api-row"><span class="api-badge badge-mistral">Mistral</span><input type="password" id="key_mistral" placeholder="..." /></div>
     <div class="api-row"><span class="api-badge badge-gemini">Gemini</span><input type="password" id="key_gemini" placeholder="AIza..." /></div>
-    <div class="setup-note">🔒 Las keys se guardan solo en tu navegador y nunca salen de tu dispositivo.</div>
+    <div class="setup-note">☁️ Las keys se guardan en tu cuenta y se sincronizan automáticamente en todos tus dispositivos. Nunca son visibles para nadie más.</div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="cancelSetup()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveKeys()">Guardar y continuar</button>
@@ -412,11 +412,48 @@
 <script src="auth.js"></script>
 
 <script>
-// ─── KEYS ──────────────────────────────────────────────────────────────────
+// ─── KEYS (Firestore sync) ─────────────────────────────────────────────────
 const KEYS_STORAGE = 'jcai_api_keys';
-function getKeys() { const r = localStorage.getItem(KEYS_STORAGE); return r ? JSON.parse(r) : {}; }
-function saveKeysToStorage(k) { localStorage.setItem(KEYS_STORAGE, JSON.stringify(k)); }
+let _cachedKeys = null; // in-memory cache para no leer localStorage en cada llamada
+
+function getKeys() {
+  if (_cachedKeys) return _cachedKeys;
+  const r = localStorage.getItem(KEYS_STORAGE);
+  _cachedKeys = r ? JSON.parse(r) : {};
+  return _cachedKeys;
+}
+function _setKeysLocally(k) {
+  _cachedKeys = k;
+  localStorage.setItem(KEYS_STORAGE, JSON.stringify(k));
+}
 function hasAnyKey() { const k = getKeys(); return !!(k.openrouter || k.groq || k.mistral || k.gemini); }
+
+// Carga keys desde Firestore y las fusiona con localStorage (Firestore tiene prioridad)
+async function loadKeysFromCloud() {
+  if (!currentUid) return;
+  try {
+    const doc = await db.collection('users').doc(currentUid).collection('settings').doc('apiKeys').get();
+    if (doc.exists) {
+      const cloudKeys = doc.data() || {};
+      _setKeysLocally(cloudKeys);
+      logConsole('🔑 Keys cargadas desde tu cuenta ✓', 'ok');
+    }
+  } catch(e) {
+    logConsole('No se pudieron cargar keys de la nube: ' + e.message, 'error');
+  }
+}
+
+// Guarda keys en Firestore + localStorage
+async function saveKeysToCloud(keys) {
+  _setKeysLocally(keys);
+  if (!currentUid) return;
+  try {
+    await db.collection('users').doc(currentUid).collection('settings').doc('apiKeys').set(keys);
+    logConsole('🔑 Keys sincronizadas con tu cuenta ✓', 'ok');
+  } catch(e) {
+    logConsole('No se pudieron guardar keys en la nube: ' + e.message, 'error');
+  }
+}
 
 function openSetup() {
   const k = getKeys();
@@ -424,7 +461,7 @@ function openSetup() {
   document.getElementById('setupScreen').style.display = 'flex';
 }
 function cancelSetup() { document.getElementById('setupScreen').style.display = 'none'; }
-function saveKeys() {
+async function saveKeys() {
   const keys = {
     openrouter: document.getElementById('key_openrouter').value.trim(),
     groq:       document.getElementById('key_groq').value.trim(),
@@ -433,9 +470,8 @@ function saveKeys() {
   };
   Object.keys(keys).forEach(k => { if (!keys[k]) delete keys[k]; });
   if (!Object.keys(keys).length) { alert('Agrega al menos una key.'); return; }
-  saveKeysToStorage(keys);
   document.getElementById('setupScreen').style.display = 'none';
-  logConsole('Keys guardadas ✓', 'ok');
+  await saveKeysToCloud(keys);
 }
 
 // ─── SIDEBAR ────────────────────────────────────────────────────────────────
@@ -647,7 +683,7 @@ function logConsole(msg, type='info') {
 function toggleConsole() { const c=document.getElementById('errorConsole'); c.style.display=c.style.display==='none'?'block':'none'; }
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
-function onUserAuthenticated(user) { init(); }
+function onUserAuthenticated(user) { loadKeysFromCloud().then(() => init()); }
 
 async function init() {
   try { const chars = await loadCharacters(currentUid); character = chars.find(c => c.id === charId); }
