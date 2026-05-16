@@ -30,12 +30,12 @@
 // ════════════════════════════════════════════════════════════
 
 const firebaseConfig = {
-  apiKey:            "TU_API_KEY",
-  authDomain:        "tu-proyecto.firebaseapp.com",
-  projectId:         "tu-proyecto-id",
-  storageBucket:     "tu-proyecto.appspot.com",
-  messagingSenderId: "123456789",
-  appId:             "1:123456789:web:abcdef123456"
+  apiKey:            "AIzaSyBPdlwhC7VZRgREOGIQbygXDXDpK5ZAowY",
+  authDomain:        "jcai-ad008.firebaseapp.com",
+  projectId:         "jcai-ad008",
+  storageBucket:     "jcai-ad008.firebasestorage.app",
+  messagingSenderId: "961245994075",
+  appId:             "1:961245994075:web:126f1e818843e54630f37e"
 };
 
 // Inicializar Firebase
