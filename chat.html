@@ -59,18 +59,19 @@
       border-left: 3px solid var(--accent);
       line-height: 1.6;
     }
-
-    /* API status badge in header */
     .api-status-dot {
       width: 7px; height: 7px; border-radius: 50%;
       background: #4ade80; display: inline-block; margin-right: 5px;
     }
-    .api-status-dot.error { background: #f76a8a; }
+    .api-status-dot.error   { background: #f76a8a; }
     .api-status-dot.loading { background: #f7c86a; animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
   </style>
 </head>
 <body>
+
+<!-- ─── AUTH OVERLAY ─── -->
+<div class="auth-overlay" id="authOverlay"></div>
 
 <!-- Pantalla de configuración de keys -->
 <div class="setup-screen" id="setupScreen" style="display:none">
@@ -96,7 +97,7 @@
     </div>
 
     <div class="setup-note">
-      🔒 Las keys se guardan en tu navegador (localStorage) y nunca salen de tu dispositivo ni se suben a ningún servidor.
+      🔒 Las keys se guardan solo en tu navegador (localStorage) y nunca salen de tu dispositivo.
     </div>
 
     <div style="display:flex; gap:10px; justify-content:flex-end">
@@ -154,39 +155,43 @@
 
 </div>
 
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script src="firebase-config.js"></script>
 <script src="characters.js"></script>
+<script src="auth.js"></script>
+
 <script>
-  // ─── KEYS STORAGE ─────────────────────────────────────────
+  // ─── KEYS STORAGE (permanecen en localStorage — son secretos del dispositivo) ──
   const KEYS_STORAGE = 'jcai_api_keys';
 
   function getKeys() {
     const raw = localStorage.getItem(KEYS_STORAGE);
     return raw ? JSON.parse(raw) : {};
   }
-
   function saveKeysToStorage(keys) {
     localStorage.setItem(KEYS_STORAGE, JSON.stringify(keys));
   }
-
   function hasAnyKey() {
     const k = getKeys();
-    return k.openrouter || k.groq || k.mistral || k.gemini;
+    return !!(k.openrouter || k.groq || k.mistral || k.gemini);
   }
 
   // ─── SETUP UI ─────────────────────────────────────────────
   function openSetup() {
     const k = getKeys();
     if (k.openrouter) document.getElementById('key_openrouter').value = k.openrouter;
-    if (k.groq)       document.getElementById('key_groq').value = k.groq;
-    if (k.mistral)    document.getElementById('key_mistral').value = k.mistral;
-    if (k.gemini)     document.getElementById('key_gemini').value = k.gemini;
+    if (k.groq)       document.getElementById('key_groq').value       = k.groq;
+    if (k.mistral)    document.getElementById('key_mistral').value    = k.mistral;
+    if (k.gemini)     document.getElementById('key_gemini').value     = k.gemini;
     document.getElementById('setupScreen').style.display = 'flex';
   }
-
   function cancelSetup() {
     document.getElementById('setupScreen').style.display = 'none';
   }
-
   function saveKeys() {
     const keys = {
       openrouter: document.getElementById('key_openrouter').value.trim(),
@@ -194,45 +199,47 @@
       mistral:    document.getElementById('key_mistral').value.trim(),
       gemini:     document.getElementById('key_gemini').value.trim(),
     };
-    // Limpiar vacíos
     Object.keys(keys).forEach(k => { if (!keys[k]) delete keys[k]; });
-
-    if (Object.keys(keys).length === 0) {
-      alert('Agrega al menos una key.');
-      return;
-    }
-
+    if (Object.keys(keys).length === 0) { alert('Agrega al menos una key.'); return; }
     saveKeysToStorage(keys);
     document.getElementById('setupScreen').style.display = 'none';
     logConsole('Keys guardadas ✓', 'ok');
   }
 
   // ─── ESTADO ───────────────────────────────────────────────
-  const params = new URLSearchParams(window.location.search);
-  const charId = params.get('id');
+  const params  = new URLSearchParams(window.location.search);
+  const charId  = params.get('id');
   let character = null;
-  let messages = [];
+  let messages  = [];
   let isLoading = false;
 
   // ─── CONSOLA ──────────────────────────────────────────────
   function logConsole(msg, type = 'info') {
-    const out = document.getElementById('consoleOutput');
+    const out   = document.getElementById('consoleOutput');
     const color = type === 'error' ? '#f76a8a' : type === 'ok' ? '#7c6af7' : '#6b6b80';
-    const time = new Date().toLocaleTimeString();
+    const time  = new Date().toLocaleTimeString();
     out.innerHTML += `<div style="color:${color}">[${time}] ${msg}</div>`;
     out.scrollTop = out.scrollHeight;
     if (type === 'error') document.getElementById('errorConsole').style.display = 'block';
   }
-
   function toggleConsole() {
     const c = document.getElementById('errorConsole');
     c.style.display = c.style.display === 'none' ? 'block' : 'none';
   }
 
+  // ─── CALLBACK DE AUTH → INIT ──────────────────────────────
+  function onUserAuthenticated(user) {
+    init();
+  }
+
   // ─── INIT ─────────────────────────────────────────────────
-  function init() {
-    const chars = loadCharacters();
-    character = chars.find(c => c.id === charId);
+  async function init() {
+    try {
+      const chars = await loadCharacters(currentUid);
+      character   = chars.find(c => c.id === charId);
+    } catch (e) {
+      logConsole('Error cargando personajes: ' + e.message, 'error');
+    }
 
     if (!character) {
       document.getElementById('chatMessages').innerHTML = `
@@ -245,19 +252,24 @@
 
     document.title = `JcAi — ${character.name}`;
     document.getElementById('headerAvatar').textContent = character.emoji;
-    document.getElementById('headerName').textContent = character.name;
+    document.getElementById('headerName').textContent   = character.name;
 
-    messages = loadHistory(charId);
+    try {
+      messages = await loadHistory(currentUid, charId);
+    } catch (e) {
+      logConsole('Error cargando historial: ' + e.message, 'error');
+      messages = [];
+    }
+
     if (messages.length === 0) {
       messages.push({ role: 'assistant', content: character.greeting });
-      saveHistory(charId, messages);
+      await saveHistory(currentUid, charId, messages);
     }
 
     renderMessages();
     updateMemoryHint();
     scrollToBottom();
 
-    // Mostrar setup si no hay keys
     if (!hasAnyKey()) {
       logConsole('No hay keys configuradas', 'error');
       openSetup();
@@ -318,7 +330,7 @@
 
   function updateMemoryHint() {
     const count = messages.length;
-    const hint = document.getElementById('memoryHint');
+    const hint  = document.getElementById('memoryHint');
     if (count >= MAX_MEMORY - 5) {
       hint.textContent = `Memoria: ${count}/${MAX_MEMORY} — los más antiguos se borrarán pronto.`;
     } else {
@@ -329,14 +341,13 @@
   // ─── ENVIAR ───────────────────────────────────────────────
   async function sendMessage() {
     const input = document.getElementById('messageInput');
-    const text = input.value.trim();
+    const text  = input.value.trim();
     if (!text || isLoading) return;
-
     if (!hasAnyKey()) { openSetup(); return; }
 
     const userMsg = { role: 'user', content: text };
     messages.push(userMsg);
-    saveHistory(charId, messages);
+    await saveHistory(currentUid, charId, messages);
     appendBubble(userMsg);
 
     input.value = '';
@@ -350,7 +361,7 @@
       removeTyping();
       const aiMsg = { role: 'assistant', content: reply };
       messages.push(aiMsg);
-      saveHistory(charId, messages);
+      await saveHistory(currentUid, charId, messages);
       appendBubble(aiMsg);
       updateMemoryHint();
     } catch (err) {
@@ -364,59 +375,24 @@
 
   // ─── FALLBACK EN CADENA ───────────────────────────────────
   async function callWithFallback() {
-    const keys = getKeys();
+    const keys   = getKeys();
     const errors = [];
 
-    // 1. OpenRouter
     if (keys.openrouter) {
-      try {
-        logConsole('Intentando OpenRouter...');
-        const r = await callOpenRouter(keys.openrouter);
-        logConsole('OpenRouter ✓', 'ok');
-        return r;
-      } catch (e) {
-        logConsole('OpenRouter falló: ' + e.message, 'error');
-        errors.push('OpenRouter: ' + e.message);
-      }
+      try { logConsole('Intentando OpenRouter...'); const r = await callOpenRouter(keys.openrouter); logConsole('OpenRouter ✓', 'ok'); return r; }
+      catch (e) { logConsole('OpenRouter falló: ' + e.message, 'error'); errors.push('OpenRouter: ' + e.message); }
     }
-
-    // 2. Groq
     if (keys.groq) {
-      try {
-        logConsole('Intentando Groq...');
-        const r = await callGroq(keys.groq);
-        logConsole('Groq ✓', 'ok');
-        return r;
-      } catch (e) {
-        logConsole('Groq falló: ' + e.message, 'error');
-        errors.push('Groq: ' + e.message);
-      }
+      try { logConsole('Intentando Groq...'); const r = await callGroq(keys.groq); logConsole('Groq ✓', 'ok'); return r; }
+      catch (e) { logConsole('Groq falló: ' + e.message, 'error'); errors.push('Groq: ' + e.message); }
     }
-
-    // 3. Mistral
     if (keys.mistral) {
-      try {
-        logConsole('Intentando Mistral...');
-        const r = await callMistral(keys.mistral);
-        logConsole('Mistral ✓', 'ok');
-        return r;
-      } catch (e) {
-        logConsole('Mistral falló: ' + e.message, 'error');
-        errors.push('Mistral: ' + e.message);
-      }
+      try { logConsole('Intentando Mistral...'); const r = await callMistral(keys.mistral); logConsole('Mistral ✓', 'ok'); return r; }
+      catch (e) { logConsole('Mistral falló: ' + e.message, 'error'); errors.push('Mistral: ' + e.message); }
     }
-
-    // 4. Gemini
     if (keys.gemini) {
-      try {
-        logConsole('Intentando Gemini...');
-        const r = await callGemini(keys.gemini);
-        logConsole('Gemini ✓', 'ok');
-        return r;
-      } catch (e) {
-        logConsole('Gemini falló: ' + e.message, 'error');
-        errors.push('Gemini: ' + e.message);
-      }
+      try { logConsole('Intentando Gemini...'); const r = await callGemini(keys.gemini); logConsole('Gemini ✓', 'ok'); return r; }
+      catch (e) { logConsole('Gemini falló: ' + e.message, 'error'); errors.push('Gemini: ' + e.message); }
     }
 
     throw new Error(errors.join(' | '));
@@ -424,8 +400,7 @@
 
   // ─── HELPER: historial para APIs OpenAI-compatible ────────
   function buildHistory() {
-    let raw = messages.slice(-MAX_MEMORY);
-    // Asegurar que no haya dos seguidos del mismo rol
+    let raw   = messages.slice(-MAX_MEMORY);
     let clean = [];
     for (const m of raw) {
       const role = m.role === 'assistant' ? 'assistant' : 'user';
@@ -440,23 +415,11 @@
 
   // ─── OPENROUTER ───────────────────────────────────────────
   async function callOpenRouter(key) {
-    const msgs = [
-      { role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' },
-      ...buildHistory()
-    ];
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const msgs = [{ role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' }, ...buildHistory()];
+    const res  = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`,
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'JcAi'
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.1-8b-instruct:free',
-        messages: msgs,
-        max_tokens: 800
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'HTTP-Referer': window.location.origin, 'X-Title': 'JcAi' },
+      body: JSON.stringify({ model: 'meta-llama/llama-3.1-8b-instruct:free', messages: msgs, max_tokens: 800 })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
@@ -465,21 +428,11 @@
 
   // ─── GROQ ─────────────────────────────────────────────────
   async function callGroq(key) {
-    const msgs = [
-      { role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' },
-      ...buildHistory()
-    ];
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const msgs = [{ role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' }, ...buildHistory()];
+    const res  = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: msgs,
-        max_tokens: 800
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: msgs, max_tokens: 800 })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
@@ -488,21 +441,11 @@
 
   // ─── MISTRAL ──────────────────────────────────────────────
   async function callMistral(key) {
-    const msgs = [
-      { role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' },
-      ...buildHistory()
-    ];
-    const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
+    const msgs = [{ role: 'system', content: character.personality + '\n\nResponde en español a menos que el usuario escriba en otro idioma.' }, ...buildHistory()];
+    const res  = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: 'mistral-small-latest',
-        messages: msgs,
-        max_tokens: 800
-      })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: 'mistral-small-latest', messages: msgs, max_tokens: 800 })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
@@ -511,7 +454,7 @@
 
   // ─── GEMINI ───────────────────────────────────────────────
   async function callGemini(key) {
-    let raw = messages.slice(-MAX_MEMORY);
+    let raw      = messages.slice(-MAX_MEMORY);
     let contents = [];
     for (const m of raw) {
       const role = m.role === 'assistant' ? 'model' : 'user';
@@ -524,8 +467,8 @@
     while (contents.length > 0 && contents[0].role === 'model') contents.shift();
     if (contents.length === 0) throw new Error('Sin mensajes');
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-    const res = await fetch(url, {
+    const url  = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+    const res  = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -555,17 +498,16 @@
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   }
 
-  function confirmClear() {
-    if (confirm(`¿Borrar historial con ${character.name}?`)) {
-      messages = [];
-      clearHistory(charId);
-      messages.push({ role: 'assistant', content: character.greeting });
-      saveHistory(charId, messages);
-      renderMessages();
-      updateMemoryHint();
-      scrollToBottom();
-      logConsole('Historial borrado', 'ok');
-    }
+  async function confirmClear() {
+    if (!confirm(`¿Borrar historial con ${character.name}?`)) return;
+    messages = [];
+    await clearHistory(currentUid, charId);
+    messages.push({ role: 'assistant', content: character.greeting });
+    await saveHistory(currentUid, charId, messages);
+    renderMessages();
+    updateMemoryHint();
+    scrollToBottom();
+    logConsole('Historial borrado', 'ok');
   }
 
   function escapeHtml(text) {
@@ -575,8 +517,6 @@
       .replace(/>/g, '&gt;')
       .replace(/\n/g, '<br>');
   }
-
-  init();
 </script>
 </body>
 </html>
