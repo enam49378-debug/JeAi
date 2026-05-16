@@ -94,3 +94,30 @@ async function clearHistory(uid, charId) {
 function generateId() {
   return 'char_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 }
+
+// ─── BOTS COMPARTIDOS ────────────────────────────────────
+// Guardamos en users/{uid}/sharedChars/{ownerUid_charId} → { ownerUid, charId, addedAt }
+function sharedRef(uid) { return db.collection('users').doc(uid).collection('sharedChars'); }
+
+async function addSharedChar(myUid, ownerUid, charId) {
+  // Load the character from the owner's collection to cache its data
+  const snap = await charRef(ownerUid, charId).get();
+  if (!snap.exists) throw new Error('Personaje no encontrado');
+  const charData = snap.data();
+  // Save reference + cached data under the recipient's account
+  const docId = ownerUid + '__' + charId;
+  await sharedRef(myUid).doc(docId).set({
+    ownerUid, charId, addedAt: Date.now(),
+    // Cache basic display fields so it shows even if owner deletes
+    name:        charData.name        || '',
+    description: charData.description || charData.slogan || '',
+    emoji:       charData.emoji       || '🤖',
+    imageUrl:    charData.imageUrl    || '',
+    tag:         charData.tag         || '',
+  });
+}
+
+async function loadSharedChars(uid) {
+  const snap = await sharedRef(uid).orderBy('addedAt', 'desc').get();
+  return snap.docs.map(d => d.data());
+}
