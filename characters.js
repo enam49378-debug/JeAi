@@ -2,7 +2,7 @@
 //  CHARACTERS.JS — Almacenamiento en Firestore (JcAi)
 // ════════════════════════════════════════════════════════════
 
-const MAX_MEMORY = 40; // mensajes guardados por personaje
+const MAX_MEMORY = 25; // mensajes en ventana activa (los más recientes)
 
 // ─── PERSONAJES POR DEFECTO ──────────────────────────────
 function getDefaultCharacters() {
