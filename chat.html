@@ -966,18 +966,19 @@ function ctxDeleteMsg() {
 async function ctxRegenMsg() {
   if (ctxMsgIndex < 0 || isLoading) return;
   const idx = ctxMsgIndex;
-  const modeUsed = chatMode; // capture current mode at moment of regen
+  const modeUsed = chatMode;
+  const previousReply = messages[idx].content; // capturar antes de modificar
   if (!regenVariants[idx]) {
-    // First regen: store original content as variant 0 (mode unknown → 'original')
-    regenVariants[idx] = { variants: [messages[idx].content], modes: ['original'], current: 0 };
+    regenVariants[idx] = { variants: [previousReply], modes: ['original'], current: 0 };
   }
   setLoading(true); showTyping();
   try {
-    // Temporarily build history up to (not including) this AI message
     const saved = messages.slice();
-    messages = messages.slice(0, idx); // pretend AI hasn't replied yet
-    const reply = await callWithFallback();
-    messages = saved; // restore
+    messages = messages.slice(0, idx);
+    const regenPrompt = buildSystemPromptForRegen(previousReply);
+    const regenSampling = { temperature: 1.15, presence_penalty: 0.9, frequency_penalty: 0.7 };
+    const reply = await callWithFallback(regenPrompt, regenSampling);
+    messages = saved;
     removeTyping();
     regenVariants[idx].variants.push(reply);
     regenVariants[idx].modes.push(modeUsed);
@@ -1001,18 +1002,21 @@ function navigateRegen(msgIndex, direction) {
   renderMessages(); updateMemoryHint();
 }
 
-// Regenerar desde la flecha ↻ del nav (equivale a ctxRegenMsg pero sin depender del menú contextual)
+// Regenerar desde la flecha ↻ del nav
 async function regenFromNav(idx) {
   if (isLoading) return;
   const modeUsed = chatMode;
+  const previousReply = messages[idx].content;
   if (!regenVariants[idx]) {
-    regenVariants[idx] = { variants: [messages[idx].content], modes: ['original'], current: 0 };
+    regenVariants[idx] = { variants: [previousReply], modes: ['original'], current: 0 };
   }
   setLoading(true); showTyping();
   try {
     const saved = messages.slice();
     messages = messages.slice(0, idx);
-    const reply = await callWithFallback();
+    const regenPrompt = buildSystemPromptForRegen(previousReply);
+    const regenSampling = { temperature: 1.15, presence_penalty: 0.9, frequency_penalty: 0.7 };
+    const reply = await callWithFallback(regenPrompt, regenSampling);
     messages = saved;
     removeTyping();
     regenVariants[idx].variants.push(reply);
@@ -1161,13 +1165,13 @@ function selectAi(id) {
 }
 
 // ─── API FALLBACK ────────────────────────────────────────────────────────────
-async function callWithFallback() {
+async function callWithFallback(sysOverride, samplingParams) {
   const keys = getKeys(), errors = [];
 
   async function tryApi(name, fn) {
     if (!keys[name]) return false;
     try {
-      const r = await fn(keys[name]);
+      const r = await fn(keys[name], sysOverride, samplingParams);
       logConsole(name + ' ✓', 'ok');
       // Mostrar qué IA respondió realmente en el subtítulo del header
       const statusEl = document.getElementById('headerStatus');
@@ -1288,6 +1292,17 @@ function buildSystemPromptWithMemory() {
   return base + `\n\n[MEMORIA DE CONVERSACIONES ANTERIORES — úsala para mantener coherencia y continuidad, pero no la menciones directamente]\n${summary}`;
 }
 
+// System prompt especial para regeneraciones — evita copiar la respuesta anterior
+function buildSystemPromptForRegen(previousReply) {
+  const base = buildSystemPromptWithMemory();
+  return base + `\n\n[REGENERACIÓN — RESPUESTA DIFERENTE OBLIGATORIA]
+La respuesta anterior fue esta (NO la repitas ni la copies):
+"""
+${previousReply.slice(0, 400)}
+"""
+Genera una respuesta COMPLETAMENTE DIFERENTE: otro ángulo, otro tono, otras palabras, otra reacción. Puede ser más corta, más larga, más emotiva, más fría, más directa — lo que sea, pero que se sienta como una respuesta genuinamente distinta. Prohibido reusar las mismas frases, la misma estructura o el mismo inicio.`;
+}
+
 function buildHistory() {
   let raw=messages.slice(-MAX_MEMORY), clean=[];
   for (const m of raw) {
@@ -1298,37 +1313,47 @@ function buildHistory() {
   return clean;
 }
 
-async function callOpenRouter(key) {
-  const msgs=[{role:'system',content:buildSystemPromptWithMemory()},...buildHistory()];
-  const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':window.location.origin,'X-Title':'JcAi'},body:JSON.stringify({model:getModeModel('openrouter'),messages:msgs,max_tokens:getModeTokens()})});
+async function callOpenRouter(key, sysOverride, sp) {
+  const msgs=[{role:'system',content:sysOverride||buildSystemPromptWithMemory()},...buildHistory()];
+  const body={model:getModeModel('openrouter'),messages:msgs,max_tokens:getModeTokens(),temperature:sp?.temperature??0.85};
+  if(sp?.presence_penalty)  body.presence_penalty  = sp.presence_penalty;
+  if(sp?.frequency_penalty) body.frequency_penalty = sp.frequency_penalty;
+  const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':window.location.origin,'X-Title':'JcAi'},body:JSON.stringify(body)});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
   const c=data.choices?.[0]?.message?.content; if(!c) throw new Error('Respuesta vacía'); return c;
 }
 
-async function callGroq(key) {
-  const msgs=[{role:'system',content:buildSystemPromptWithMemory()},...buildHistory()];
-  const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:getModeModel('groq'),messages:msgs,max_tokens:getModeTokens()})});
+async function callGroq(key, sysOverride, sp) {
+  const msgs=[{role:'system',content:sysOverride||buildSystemPromptWithMemory()},...buildHistory()];
+  const body={model:getModeModel('groq'),messages:msgs,max_tokens:getModeTokens(),temperature:sp?.temperature??0.85};
+  if(sp?.presence_penalty)  body.presence_penalty  = sp.presence_penalty;
+  if(sp?.frequency_penalty) body.frequency_penalty = sp.frequency_penalty;
+  const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(body)});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
   const c=data.choices?.[0]?.message?.content; if(!c) throw new Error('Respuesta vacía'); return c;
 }
 
-async function callMistral(key) {
-  const msgs=[{role:'system',content:buildSystemPromptWithMemory()},...buildHistory()];
-  const res=await fetch('https://api.mistral.ai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:getModeModel('mistral'),messages:msgs,max_tokens:getModeTokens()})});
+async function callMistral(key, sysOverride, sp) {
+  const msgs=[{role:'system',content:sysOverride||buildSystemPromptWithMemory()},...buildHistory()];
+  const body={model:getModeModel('mistral'),messages:msgs,max_tokens:getModeTokens(),temperature:sp?.temperature??0.85};
+  // Mistral no soporta presence/frequency penalty — solo temperature
+  const res=await fetch('https://api.mistral.ai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify(body)});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
   const c=data.choices?.[0]?.message?.content; if(!c) throw new Error('Respuesta vacía'); return c;
 }
 
-async function callGemini(key) {
-  const sysPrompt = buildSystemPromptWithMemory();
+async function callGemini(key, sysOverride, sp) {
+  const sysPrompt = sysOverride || buildSystemPromptWithMemory();
   let raw=messages.slice(-MAX_MEMORY), contents=[];
   for(const m of raw){const role=m.role==='assistant'?'model':'user';if(contents.length>0&&contents[contents.length-1].role===role)contents[contents.length-1].parts[0].text+='\n'+m.content;else contents.push({role,parts:[{text:m.content}]});}
   while(contents.length>0&&contents[0].role==='model')contents.shift();
   if(!contents.length) contents.push({role:'user',parts:[{text:'Hola'}]});
-  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_instruction:{parts:[{text:sysPrompt}]},contents,generationConfig:{maxOutputTokens:getModeTokens()}})});
+  // Gemini solo soporta temperature (no presence/frequency penalty)
+  const genConfig={maxOutputTokens:getModeTokens(),temperature:sp?.temperature??0.85};
+  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_instruction:{parts:[{text:sysPrompt}]},contents,generationConfig:genConfig})});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
   const c=data.candidates?.[0]?.content?.parts?.[0]?.text; if(!c) throw new Error('Respuesta vacía'); return c;
