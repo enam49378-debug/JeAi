@@ -366,7 +366,7 @@
 <!-- CONTEXT MENU -->
 <div class="ctx-menu" id="ctxMenu" style="display:none">
   <div class="ctx-item" id="ctxRegenItem" onclick="ctxRegenMsg()" style="display:none">🔄 Regenerar</div>
-  <div class="ctx-item" onclick="ctxEditMsg()">✏️ Editar mensaje</div>
+  <div class="ctx-item" id="ctxEditItem" onclick="ctxEditMsg()">✏️ Editar mensaje</div>
   <div class="ctx-item danger" onclick="ctxDeleteMsg()">🗑️ Borrar mensaje</div>
 </div>
 
@@ -636,6 +636,8 @@ function deleteSession(id) {
   let sessions = loadSessions();
   sessions = sessions.filter(s => s.id !== id);
   saveSessions(sessions);
+  // Limpiar memoria comprimida de esa sesión
+  localStorage.removeItem('jcai_summary_' + charId + '_' + id);
   if (id === currentChatId) {
     if (sessions.length) loadSession(sessions[sessions.length-1].id);
     else startNewChat();
@@ -692,7 +694,7 @@ function setMode(mode) {
 const MODE_CONFIG = {
   rapido:    { suffix:'\n\n[MODO RÁPIDO] Respuestas cortas, espontáneas, como en una conversación real. Máximo 2-3 oraciones. Sin descripciones largas. Diálogo natural y dinámico — nada de respuestas de asistente.',            max_tokens:400,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
   sinfiltro: { suffix:'\n\n[MODO SIN FILTROS] Sin autocensura, sin disclaimers, sin suavizar. Responde como el personaje genuinamente lo haría — directo, crudo, auténtico. Jamás rompas el personaje.',      max_tokens:900,  model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile',   model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
-  reflexivo: { suffix:'\n\n[MODO REFLEXIVO] Respuestas elaboradas con profundidad emocional y narrativa. Desarrolla pensamientos internos, reacciones y entorno. Escribe como un autor que da vida al personaje — no como un asistente que explica.',        max_tokens:1200, model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
+  reflexivo: { suffix:'\n\n[MODO REFLEXIVO] Prioriza el DIÁLOGO natural y fluido. El personaje habla, responde, reacciona con sus propias palabras — las descripciones de entorno o acciones son secundarias y solo aparecen cuando agregan algo real a la escena. No abuses de los asteriscos ni de párrafos descriptivos: la conversación es lo primero. Profundidad emocional sí, pero expresada a través de lo que el personaje DICE, no de lo que narra el narrador.',        max_tokens:1200, model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
   maximo:    { suffix:'\n\n[MODO MÁXIMO — INMERSIÓN TOTAL] Eres [NOMBRE] al 100%. Descripción cinematográfica: entorno, sensaciones físicas, emociones, tensión. Cada respuesta es una escena vívida. Cero ruptura de personaje, cero lenguaje de asistente.', max_tokens:1500, model_openrouter:'google/gemini-2.0-flash-exp:free',  model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
 };
 
@@ -845,21 +847,37 @@ function buildBubbleEl(msg, index) {
     avatarHtml = `<div class="msg-avatar">${character.emoji||'🤖'}</div>`;
   }
 
-  // Build regen navigation if AI message has variants
+  // Build regen navigation if AI message has variants OR is the last AI message (can always regen)
   let regenNavHtml = '';
-  if (!isUser && regenVariants[index] && regenVariants[index].variants.length > 1) {
+  if (!isUser) {
+    const isLast = isLastAiMessage(index);
     const rv = regenVariants[index];
-    const cur = rv.current + 1, total = rv.variants.length;
-    const modeLabel = rv.modes?.[rv.current] || '';
-    const modeTag = modeLabel && modeLabel !== 'original'
-      ? `<span style="font-size:0.67rem;background:rgba(124,106,247,0.15);color:#7c6af7;border-radius:4px;padding:1px 5px;margin-left:3px">${modeLabel}</span>`
-      : (modeLabel === 'original' ? `<span style="font-size:0.67rem;color:var(--text-muted);margin-left:3px">original</span>` : '');
-    regenNavHtml = `
-      <div class="regen-nav">
-        <button class="regen-arrow" onclick="navigateRegen(${index},-1)" ${rv.current===0?'disabled':''}title="Respuesta anterior">◀</button>
-        <span class="regen-counter">${cur}/${total}${modeTag}</span>
-        <button class="regen-arrow" onclick="navigateRegen(${index},1)" ${rv.current===total-1?'disabled':''}title="Respuesta siguiente">▶</button>
-      </div>`;
+    const hasVariants = rv && rv.variants.length > 1;
+
+    if (hasVariants || isLast) {
+      const cur   = rv ? rv.current + 1 : 1;
+      const total = rv ? rv.variants.length : 1;
+      const atEnd = !rv || rv.current === rv.variants.length - 1;
+      const modeLabel = rv?.modes?.[rv.current] || '';
+      const modeTag = modeLabel && modeLabel !== 'original'
+        ? `<span style="font-size:0.67rem;background:rgba(124,106,247,0.15);color:#7c6af7;border-radius:4px;padding:1px 5px;margin-left:3px">${modeLabel}</span>`
+        : (modeLabel === 'original' ? `<span style="font-size:0.67rem;color:var(--text-muted);margin-left:3px">original</span>` : '');
+      // Right arrow: navigate if there are next variants, regenerate if at the end (last AI msg only)
+      const rightAction = (atEnd && isLast)
+        ? `regenFromNav(${index})`
+        : `navigateRegen(${index},1)`;
+      const rightTitle = (atEnd && isLast) ? 'Regenerar nueva respuesta' : 'Respuesta siguiente';
+      const rightLabel = (atEnd && isLast) ? '↻' : '▶';
+      const rightStyle = (atEnd && isLast)
+        ? 'color:var(--accent);font-size:1rem;'
+        : '';
+      regenNavHtml = `
+        <div class="regen-nav">
+          <button class="regen-arrow" onclick="navigateRegen(${index},-1)" ${!rv || rv.current===0?'disabled':''}title="Respuesta anterior">◀</button>
+          <span class="regen-counter">${cur}/${total}${modeTag}</span>
+          <button class="regen-arrow" onclick="${rightAction}" style="${rightStyle}" title="${rightTitle}">${rightLabel}</button>
+        </div>`;
+    }
   }
 
   wrapper.innerHTML = `${avatarHtml}
@@ -905,11 +923,23 @@ function updateMemoryHint() {
 }
 
 // ─── CONTEXT MENU ───────────────────────────────────────────────────────────
+// Devuelve true si el índice es el último mensaje del bot (no hay mensajes de bot después)
+function isLastAiMessage(index) {
+  for (let i = index + 1; i < messages.length; i++) {
+    if (messages[i].role === 'assistant') return false;
+  }
+  return messages[index]?.role === 'assistant';
+}
+
 function showCtxMenu(e, index, isUser) {
   e.preventDefault();
   ctxMsgIndex = index; ctxMsgIsUser = isUser;
-  // Show "Regenerar" only for AI messages
-  document.getElementById('ctxRegenItem').style.display = isUser ? 'none' : 'flex';
+  const isLast = isLastAiMessage(index);
+  // Regenerar: solo en el último mensaje del bot
+  document.getElementById('ctxRegenItem').style.display = (!isUser && isLast) ? 'flex' : 'none';
+  // Editar: solo en el último mensaje del bot o en mensajes del usuario que sean el último antes del fin
+  const canEdit = isUser ? true : isLast;
+  document.getElementById('ctxEditItem').style.display = canEdit ? 'flex' : 'none';
   const m = document.getElementById('ctxMenu');
   m.style.display = 'block';
   m.style.left = Math.min(e.clientX, window.innerWidth-170) + 'px';
@@ -969,6 +999,33 @@ function navigateRegen(msgIndex, direction) {
   messages[msgIndex].content = rv.variants[rv.current];
   saveCurrentSession(messages);
   renderMessages(); updateMemoryHint();
+}
+
+// Regenerar desde la flecha ↻ del nav (equivale a ctxRegenMsg pero sin depender del menú contextual)
+async function regenFromNav(idx) {
+  if (isLoading) return;
+  const modeUsed = chatMode;
+  if (!regenVariants[idx]) {
+    regenVariants[idx] = { variants: [messages[idx].content], modes: ['original'], current: 0 };
+  }
+  setLoading(true); showTyping();
+  try {
+    const saved = messages.slice();
+    messages = messages.slice(0, idx);
+    const reply = await callWithFallback();
+    messages = saved;
+    removeTyping();
+    regenVariants[idx].variants.push(reply);
+    regenVariants[idx].modes.push(modeUsed);
+    regenVariants[idx].current = regenVariants[idx].variants.length - 1;
+    messages[idx].content = reply;
+    saveCurrentSession(messages);
+    renderMessages(); updateMemoryHint(); renderSidebar();
+    logConsole(`Respuesta regenerada con modo "${modeUsed}" ✓`, 'ok');
+  } catch(err) {
+    removeTyping(); logConsole('Error al regenerar: '+err.message,'error');
+  }
+  setLoading(false);
 }
 
 function ctxEditMsg() {
@@ -1040,6 +1097,9 @@ async function sendMessage() {
     updateMemoryHint(); renderSidebar();
   }
   // If text is empty: bot sends another message (no user bubble added)
+
+  // Comprimir mensajes viejos si la conversación creció (sistema de memoria estilo C.AI)
+  await maybeCompressHistory();
 
   setLoading(true); showTyping();
 
@@ -1138,6 +1198,96 @@ async function callWithFallback() {
   throw new Error(errors.join(' | ') || 'Sin keys configuradas');
 }
 
+// ─── MEMORIA COMPRIMIDA (estilo C.AI) ────────────────────────────────────────
+// Cuando hay más de MAX_MEMORY mensajes, los más viejos se resumen automáticamente.
+// El resumen se guarda por sesión y se inyecta al inicio del system prompt.
+// Así el bot "recuerda" el pasado sin gastar tokens en reproducirlo completo.
+
+const SUMMARY_THRESHOLD = 10; // comprimir cuando haya ≥10 mensajes fuera de la ventana activa
+const SUMMARY_BATCH     = 10; // comprimir de 10 en 10 mensajes viejos
+
+function summaryKey() { return 'jcai_summary_' + charId + '_' + currentChatId; }
+function loadSummary() { return localStorage.getItem(summaryKey()) || ''; }
+function saveSummary(s) { localStorage.setItem(summaryKey(), s); }
+
+// Llama a la IA para resumir un bloque de mensajes viejos
+async function compressMessages(oldMsgs) {
+  const keys = getKeys();
+  const block = oldMsgs.map(m => `${m.role === 'user' ? 'Usuario' : character.name}: ${m.content}`).join('\n');
+  const prompt = `Eres un sistema de memoria para un chat de roleplay. Resume el siguiente fragmento de conversación en 3-5 oraciones cortas y neutras, en tercera persona, preservando los eventos importantes, decisiones y cambios emocionales. No incluyas saludos ni frases de relleno. Solo los hechos relevantes.\n\nConversación:\n${block}\n\nResumen:`;
+
+  // Intenta con Gemini primero, luego fallback
+  async function tryCompress(name, fn) {
+    if (!keys[name]) return null;
+    try { return await fn(keys[name], prompt); } catch(e) { return null; }
+  }
+
+  // Funciones de compresión (llamadas simples sin historial)
+  async function geminiCompress(key, p) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ contents:[{role:'user',parts:[{text:p}]}], generationConfig:{maxOutputTokens:300} })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error?.message||'HTTP '+res.status);
+    return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  }
+  async function openrouterCompress(key, p) {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':window.location.origin,'X-Title':'JcAi'},
+      body: JSON.stringify({ model:'meta-llama/llama-3.1-8b-instruct:free', messages:[{role:'user',content:p}], max_tokens:300 })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error?.message||'HTTP '+res.status);
+    return d.choices?.[0]?.message?.content || null;
+  }
+  async function groqCompress(key, p) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({ model:'llama-3.1-8b-instant', messages:[{role:'user',content:p}], max_tokens:300 })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error?.message||'HTTP '+res.status);
+    return d.choices?.[0]?.message?.content || null;
+  }
+
+  return await tryCompress('gemini', geminiCompress)
+      || await tryCompress('openrouter', openrouterCompress)
+      || await tryCompress('groq', groqCompress)
+      || null;
+}
+
+// Verifica si hay mensajes viejos que comprimir y los procesa
+async function maybeCompressHistory() {
+  if (messages.length <= MAX_MEMORY) return; // no hay nada viejo todavía
+  const oldCount = messages.length - MAX_MEMORY;
+  if (oldCount < SUMMARY_THRESHOLD) return; // esperar a tener suficiente para comprimir
+
+  const batchSize  = Math.min(oldCount, SUMMARY_BATCH);
+  const toCompress = messages.slice(0, batchSize);
+
+  logConsole(`Comprimiendo ${batchSize} mensajes antiguos...`, 'info');
+  const newChunk = await compressMessages(toCompress);
+  if (!newChunk) { logConsole('No se pudo comprimir memoria (sin API disponible)', 'error'); return; }
+
+  // Acumular resúmenes anteriores + nuevo
+  const prev = loadSummary();
+  saveSummary((prev ? prev + '\n' : '') + newChunk.trim());
+
+  // Eliminar los mensajes comprimidos del array y guardar
+  messages = messages.slice(batchSize);
+  saveCurrentSession(messages);
+  logConsole('Memoria comprimida ✓', 'ok');
+}
+
+// Inyecta el resumen acumulado en el system prompt si existe
+function buildSystemPromptWithMemory() {
+  const base    = buildSystemPrompt();
+  const summary = loadSummary();
+  if (!summary) return base;
+  return base + `\n\n[MEMORIA DE CONVERSACIONES ANTERIORES — úsala para mantener coherencia y continuidad, pero no la menciones directamente]\n${summary}`;
+}
+
 function buildHistory() {
   let raw=messages.slice(-MAX_MEMORY), clean=[];
   for (const m of raw) {
@@ -1149,7 +1299,7 @@ function buildHistory() {
 }
 
 async function callOpenRouter(key) {
-  const msgs=[{role:'system',content:buildSystemPrompt()},...buildHistory()];
+  const msgs=[{role:'system',content:buildSystemPromptWithMemory()},...buildHistory()];
   const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'HTTP-Referer':window.location.origin,'X-Title':'JcAi'},body:JSON.stringify({model:getModeModel('openrouter'),messages:msgs,max_tokens:getModeTokens()})});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
@@ -1157,7 +1307,7 @@ async function callOpenRouter(key) {
 }
 
 async function callGroq(key) {
-  const msgs=[{role:'system',content:buildSystemPrompt()},...buildHistory()];
+  const msgs=[{role:'system',content:buildSystemPromptWithMemory()},...buildHistory()];
   const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:getModeModel('groq'),messages:msgs,max_tokens:getModeTokens()})});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
@@ -1165,7 +1315,7 @@ async function callGroq(key) {
 }
 
 async function callMistral(key) {
-  const msgs=[{role:'system',content:buildSystemPrompt()},...buildHistory()];
+  const msgs=[{role:'system',content:buildSystemPromptWithMemory()},...buildHistory()];
   const res=await fetch('https://api.mistral.ai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:getModeModel('mistral'),messages:msgs,max_tokens:getModeTokens()})});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
@@ -1173,13 +1323,12 @@ async function callMistral(key) {
 }
 
 async function callGemini(key) {
+  const sysPrompt = buildSystemPromptWithMemory();
   let raw=messages.slice(-MAX_MEMORY), contents=[];
   for(const m of raw){const role=m.role==='assistant'?'model':'user';if(contents.length>0&&contents[contents.length-1].role===role)contents[contents.length-1].parts[0].text+='\n'+m.content;else contents.push({role,parts:[{text:m.content}]});}
-  // Gemini requiere que el primer mensaje sea del usuario — eliminar mensajes iniciales del modelo
   while(contents.length>0&&contents[0].role==='model')contents.shift();
-  // Si el historial quedó vacío (ej: solo había saludo del bot), agregar mensaje placeholder
   if(!contents.length) contents.push({role:'user',parts:[{text:'Hola'}]});
-  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_instruction:{parts:[{text:buildSystemPrompt()}]},contents,generationConfig:{maxOutputTokens:getModeTokens()}})});
+  const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_instruction:{parts:[{text:sysPrompt}]},contents,generationConfig:{maxOutputTokens:getModeTokens()}})});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
   const c=data.candidates?.[0]?.content?.parts?.[0]?.text; if(!c) throw new Error('Respuesta vacía'); return c;
@@ -1197,8 +1346,9 @@ function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.sc
 async function confirmClear() {
   if(!confirm(`¿Borrar este chat con ${character.name}?`)) return;
   messages=[{role:'assistant',content:character.greeting}];
+  localStorage.removeItem(summaryKey()); // limpiar memoria comprimida
   saveCurrentSession(messages); renderMessages(); updateMemoryHint(); scrollToBottom(); renderSidebar();
-  logConsole('Chat borrado','ok');
+  logConsole('Chat y memoria comprimida borrados','ok');
 }
 
 // ─── EDIT BOT ────────────────────────────────────────────────────────────────
