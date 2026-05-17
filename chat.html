@@ -690,10 +690,10 @@ function setMode(mode) {
 }
 
 const MODE_CONFIG = {
-  rapido:    { suffix:'\n\nResponde RÁPIDO y conciso. Frases cortas.',            max_tokens:400,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
-  sinfiltro: { suffix:'\n\nResponde SIN FILTROS. Directo, sin disclaimers.',      max_tokens:900,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
-  reflexivo: { suffix:'\n\nPiensa PROFUNDAMENTE. Sé detallado y preciso.',        max_tokens:1200, model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
-  maximo:    { suffix:'\n\nEres [NOMBRE]. NUNCA rompas el personaje. Inmersión total.', max_tokens:1500, model_openrouter:'google/gemini-2.0-flash-exp:free',  model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
+  rapido:    { suffix:'\n\n[MODO RÁPIDO] Respuestas cortas y directas. Máximo 2-3 oraciones. Sin descripciones de escena largas. Prioriza diálogo ágil e ingenioso.',            max_tokens:400,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
+  sinfiltro: { suffix:'\n\n[MODO SIN FILTROS] Responde directo y sin disclaimers. Sin autocensura. Sé auténtico al personaje sin suavizar nada.',      max_tokens:900,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
+  reflexivo: { suffix:'\n\n[MODO REFLEXIVO] Respuestas elaboradas y con profundidad. Desarrolla bien las ideas, usa descripciones expresivas y varía el ritmo narrativo.',        max_tokens:1200, model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
+  maximo:    { suffix:'\n\n[MODO MÁXIMO — INMERSIÓN TOTAL] Eres [NOMBRE] por completo. Jamás rompas el personaje. Construye el mundo con detalle: entorno, sensaciones, emociones. Descripción cinematográfica.', max_tokens:1500, model_openrouter:'google/gemini-2.0-flash-exp:free',  model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
 };
 
 function loadUserPersona() { const r = localStorage.getItem('jcai_user_persona'); return r ? JSON.parse(r) : null; }
@@ -713,7 +713,22 @@ function buildSystemPrompt() {
     if (persona.bio)      personaCtx += `\nDescripción: ${persona.bio}`;
     personaCtx += '\nUsa esta información para personalizar tus respuestas hacia el usuario.';
   }
-  return (character?.personality || '') + suffix + personaCtx + '\n\nResponde en español a menos que el usuario escriba en otro idioma.';
+
+  // Base rules for natural, non-repetitive behavior
+  const naturalBehaviorRules = `
+
+ROL: Eres ${character?.name || 'el personaje'} en una conversación de roleplay. NO eres un asistente de IA, NO eres un chatbot, NO eres ChatGPT ni ninguna IA de ayuda. Nunca respondas como si fueras una IA asistente. Nunca ofrezcas ayuda, sugerencias, explicaciones ni disclaimers — eso rompe el personaje por completo.
+Eres un personaje real dentro de una historia. Reacciona, siente, habla y actúa como ese personaje en todo momento.
+
+REGLAS DE COMPORTAMIENTO NATURAL:
+- NO fuerces los rasgos, hobbies o aficiones del personaje en cada respuesta. Si al personaje le gusta dibujar, no estará dibujando en cada mensaje — solo menciona esas actividades cuando sea orgánico y tenga sentido en el contexto.
+- Varía las acciones, el entorno y el estado del personaje en función de lo que la conversación pida. Un personaje activo puede estar descansando, pensando, comiendo, caminando, etc.
+- Reacciona primero al mensaje del usuario. La personalidad se expresa a través del tono, las palabras y las emociones, no repitiendo aficiones en bucle.
+- Evita repetir la misma acción o descripción de escena en mensajes consecutivos. Cada respuesta debe sentirse fresca.
+- Si ya describiste una escena antes, no la repitas: avanza la narrativa.
+- NUNCA digas cosas como "¿En qué puedo ayudarte?", "Claro, con gusto te explico", "Como IA..." o cualquier frase de asistente.`;
+
+  return (character?.personality || '') + naturalBehaviorRules + suffix + personaCtx + '\n\nResponde en español a menos que el usuario escriba en otro idioma.';
 }
 
 function getModeTokens() { return (MODE_CONFIG[chatMode] || MODE_CONFIG.reflexivo).max_tokens; }
