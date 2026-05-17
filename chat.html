@@ -749,13 +749,29 @@ function onUserAuthenticated(user) { loadKeysFromCloud().then(() => init()); }
 
 async function init() {
   try {
-    // If shared bot, load from owner's collection; otherwise from own
     const sourceUid = ownerParam || currentUid;
-    const chars = await loadCharacters(sourceUid);
+    if (!sourceUid) throw new Error('No hay sesión activa. Intenta recargar la página.');
+
+    // Timeout de 10s — evita que se quede en "Cargando..." eternamente
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifica tu conexión e intenta de nuevo.')), 10000)
+    );
+    const chars = await Promise.race([loadCharacters(sourceUid), timeout]);
     character = chars.find(c => c.id === charId);
-  } catch (e) { logConsole('Error cargando personajes: '+e.message, 'error'); }
+  } catch (e) {
+    logConsole('Error cargando personajes: ' + e.message, 'error');
+    document.getElementById('headerName').textContent = 'Error al cargar';
+    document.getElementById('chatMessages').innerHTML = `
+      <div class="empty-state">
+        <div class="big-emoji">⚠️</div>
+        <p style="color:var(--accent2);margin-bottom:12px">${e.message}</p>
+        <a href="index.html" style="color:var(--accent)">← Volver al inicio</a>
+      </div>`;
+    return;
+  }
 
   if (!character) {
+    document.getElementById('headerName').textContent = 'No encontrado';
     document.getElementById('chatMessages').innerHTML = '<div class="empty-state"><div class="big-emoji">😕</div><p>Personaje no encontrado. <a href="index.html" style="color:var(--accent)">Volver</a></p></div>';
     return;
   }
@@ -1183,7 +1199,7 @@ async function saveEditBot() {
   character.greeting    = greeting     || character.greeting;
   // Persist to Firebase if possible
   try {
-    if (typeof saveCharacter === 'function') await saveCharacter(character, currentUid);
+    if (typeof saveCharacter === 'function') await saveCharacter(currentUid, character);
   } catch(e) { logConsole('No se pudo guardar en Firebase: '+e.message,'error'); }
   document.getElementById('editBotScreen').style.display = 'none';
   document.title = 'JcAi — ' + character.name;
