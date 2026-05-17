@@ -547,7 +547,7 @@ let ctxMsgIsUser  = false;
 // We store it in session to survive re-renders
 let regenVariants = {}; // { [msgIndex]: { variants: [...], modes: [...], current: 0 } }
 let selectedAi    = 'auto'; // 'auto' | 'gemini' | 'openrouter' | 'groq' | 'mistral'
-const MAX_MEMORY  = 30;
+// MAX_MEMORY ya definido en characters.js (40 mensajes)
 function chatModeKey() { return 'jcai_chat_mode_' + charId; }
 
 // ─── STREAK ─────────────────────────────────────────────────────────────────
