@@ -691,7 +691,7 @@ function setMode(mode) {
 
 const MODE_CONFIG = {
   rapido:    { suffix:'\n\n[MODO RÁPIDO] Respuestas cortas, espontáneas, como en una conversación real. Máximo 2-3 oraciones. Sin descripciones largas. Diálogo natural y dinámico — nada de respuestas de asistente.',            max_tokens:400,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
-  sinfiltro: { suffix:'\n\n[MODO SIN FILTROS] Sin autocensura, sin disclaimers, sin suavizar. Responde como el personaje genuinamente lo haría — directo, crudo, auténtico. Jamás rompas el personaje.',      max_tokens:900,  model_openrouter:'meta-llama/llama-3.1-8b-instruct:free', model_groq:'llama-3.1-8b-instant',   model_mistral:'mistral-small-latest', model_gemini:'gemini-2.0-flash' },
+  sinfiltro: { suffix:'\n\n[MODO SIN FILTROS] Sin autocensura, sin disclaimers, sin suavizar. Responde como el personaje genuinamente lo haría — directo, crudo, auténtico. Jamás rompas el personaje.',      max_tokens:900,  model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile',   model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
   reflexivo: { suffix:'\n\n[MODO REFLEXIVO] Respuestas elaboradas con profundidad emocional y narrativa. Desarrolla pensamientos internos, reacciones y entorno. Escribe como un autor que da vida al personaje — no como un asistente que explica.',        max_tokens:1200, model_openrouter:'meta-llama/llama-3.3-70b-instruct:free', model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
   maximo:    { suffix:'\n\n[MODO MÁXIMO — INMERSIÓN TOTAL] Eres [NOMBRE] al 100%. Descripción cinematográfica: entorno, sensaciones físicas, emociones, tensión. Cada respuesta es una escena vívida. Cero ruptura de personaje, cero lenguaje de asistente.', max_tokens:1500, model_openrouter:'google/gemini-2.0-flash-exp:free',  model_groq:'llama-3.3-70b-versatile', model_mistral:'mistral-large-latest', model_gemini:'gemini-2.0-flash' },
 };
@@ -745,18 +745,28 @@ function logConsole(msg, type='info') {
 function toggleConsole() { const c=document.getElementById('errorConsole'); c.style.display=c.style.display==='none'?'block':'none'; }
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
-function onUserAuthenticated(user) { loadKeysFromCloud().then(() => init()); }
+function onUserAuthenticated(user) { loadKeysFromCloud().then(() => init(user.uid)); }
 
-async function init() {
+async function init(resolvedUid) {
   try {
-    const sourceUid = ownerParam || currentUid;
+    const sourceUid = ownerParam || resolvedUid || currentUid;
     if (!sourceUid) throw new Error('No hay sesión activa. Intenta recargar la página.');
 
-    // Timeout de 10s — evita que se quede en "Cargando..." eternamente
+    // Carga con reintento automático (1 reintento tras 1.5s si falla)
+    async function loadWithRetry(uid) {
+      try { return await loadCharacters(uid); }
+      catch(e) {
+        logConsole('Primer intento falló, reintentando... (' + e.message + ')', 'error');
+        await new Promise(r => setTimeout(r, 1500));
+        return await loadCharacters(uid);
+      }
+    }
+
+    // Timeout de 20s — suficiente para conexiones lentas y arranques fríos de Firestore
     const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifica tu conexión e intenta de nuevo.')), 10000)
+      setTimeout(() => reject(new Error('Tiempo de espera agotado (20s). Verifica tu conexión e intenta de nuevo.')), 20000)
     );
-    const chars = await Promise.race([loadCharacters(sourceUid), timeout]);
+    const chars = await Promise.race([loadWithRetry(sourceUid), timeout]);
     character = chars.find(c => c.id === charId);
   } catch (e) {
     logConsole('Error cargando personajes: ' + e.message, 'error');
@@ -1096,11 +1106,23 @@ async function callWithFallback() {
 
   async function tryApi(name, fn) {
     if (!keys[name]) return false;
-    try { const r = await fn(keys[name]); logConsole(name + ' ✓', 'ok'); return r; }
+    try {
+      const r = await fn(keys[name]);
+      logConsole(name + ' ✓', 'ok');
+      // Mostrar qué IA respondió realmente en el subtítulo del header
+      const statusEl = document.getElementById('headerStatus');
+      if (statusEl) {
+        const label = name.charAt(0).toUpperCase() + name.slice(1);
+        const wasForced = selectedAi !== 'auto' && name !== selectedAi;
+        statusEl.textContent = wasForced ? `⚠️ Falló ${selectedAi}, usó ${label}` : `✦ ${label} activo`;
+        setTimeout(() => { if(statusEl) statusEl.textContent = ownerParam ? '🔗 Bot compartido • IA activa' : 'IA activa'; }, 4000);
+      }
+      return r;
+    }
     catch(e) { logConsole(name + ' falló: ' + e.message, 'error'); errors.push(name + ': ' + e.message); return false; }
   }
 
-  // If user picked a specific AI, try it first
+  // Si el usuario eligió una IA específica, intentarla primero
   if (selectedAi !== 'auto') {
     const fnMap = { gemini:callGemini, openrouter:callOpenRouter, groq:callGroq, mistral:callMistral };
     const r = await tryApi(selectedAi, fnMap[selectedAi]);
@@ -1108,7 +1130,7 @@ async function callWithFallback() {
     logConsole('IA seleccionada falló, usando fallback automático...', 'error');
   }
 
-  // Gemini first (best for roleplay)
+  // Orden de fallback: Gemini → OpenRouter → Groq → Mistral
   const r1 = await tryApi('gemini',      callGemini);      if (r1 !== false) return r1;
   const r2 = await tryApi('openrouter',  callOpenRouter);  if (r2 !== false) return r2;
   const r3 = await tryApi('groq',        callGroq);        if (r3 !== false) return r3;
@@ -1153,8 +1175,10 @@ async function callMistral(key) {
 async function callGemini(key) {
   let raw=messages.slice(-MAX_MEMORY), contents=[];
   for(const m of raw){const role=m.role==='assistant'?'model':'user';if(contents.length>0&&contents[contents.length-1].role===role)contents[contents.length-1].parts[0].text+='\n'+m.content;else contents.push({role,parts:[{text:m.content}]});}
+  // Gemini requiere que el primer mensaje sea del usuario — eliminar mensajes iniciales del modelo
   while(contents.length>0&&contents[0].role==='model')contents.shift();
-  if(!contents.length) throw new Error('Sin mensajes para Gemini');
+  // Si el historial quedó vacío (ej: solo había saludo del bot), agregar mensaje placeholder
+  if(!contents.length) contents.push({role:'user',parts:[{text:'Hola'}]});
   const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system_instruction:{parts:[{text:buildSystemPrompt()}]},contents,generationConfig:{maxOutputTokens:getModeTokens()}})});
   const data=await res.json();
   if(!res.ok) throw new Error(data.error?.message||'HTTP '+res.status);
