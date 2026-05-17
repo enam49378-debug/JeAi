@@ -545,8 +545,10 @@ let ctxMsgIsUser  = false;
 
 // regenVariants: map of AI message index → array of content strings, plus current index
 // We store it in session to survive re-renders
-let regenVariants = {}; // { [msgIndex]: { variants: [...], current: 0 } }
+let regenVariants = {}; // { [msgIndex]: { variants: [...], modes: [...], current: 0 } }
 let selectedAi    = 'auto'; // 'auto' | 'gemini' | 'openrouter' | 'groq' | 'mistral'
+const MAX_MEMORY  = 30;
+function chatModeKey() { return 'jcai_chat_mode_' + charId; }
 
 // ─── STREAK ─────────────────────────────────────────────────────────────────
 function streakKey()     { return 'jcai_streak_' + charId; }
@@ -683,6 +685,7 @@ function genId() { return 'sess_' + Date.now() + '_' + Math.random().toString(36
 function setMode(mode) {
   chatMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  localStorage.setItem(chatModeKey(), mode);
   logConsole('Modo: ' + mode, 'ok');
 }
 
@@ -758,6 +761,9 @@ async function init() {
   if (!sess.messages.length) saveCurrentSession(messages);
 
   renderMessages(); updateMemoryHint(); scrollToBottom(); renderSidebar(); renderAiBar();
+  // Restore previously selected chat mode (persisted across reloads)
+  const savedMode = localStorage.getItem(chatModeKey());
+  if (savedMode && MODE_CONFIG[savedMode]) setMode(savedMode);
   if (!hasAnyKey()) { logConsole('No hay keys configuradas','error'); openSetup(); }
   else logConsole('Personaje cargado: '+character.name,'ok');
 }
@@ -803,10 +809,14 @@ function buildBubbleEl(msg, index) {
   if (!isUser && regenVariants[index] && regenVariants[index].variants.length > 1) {
     const rv = regenVariants[index];
     const cur = rv.current + 1, total = rv.variants.length;
+    const modeLabel = rv.modes?.[rv.current] || '';
+    const modeTag = modeLabel && modeLabel !== 'original'
+      ? `<span style="font-size:0.67rem;background:rgba(124,106,247,0.15);color:#7c6af7;border-radius:4px;padding:1px 5px;margin-left:3px">${modeLabel}</span>`
+      : (modeLabel === 'original' ? `<span style="font-size:0.67rem;color:var(--text-muted);margin-left:3px">original</span>` : '');
     regenNavHtml = `
       <div class="regen-nav">
         <button class="regen-arrow" onclick="navigateRegen(${index},-1)" ${rv.current===0?'disabled':''}title="Respuesta anterior">◀</button>
-        <span class="regen-counter">${cur}/${total}</span>
+        <span class="regen-counter">${cur}/${total}${modeTag}</span>
         <button class="regen-arrow" onclick="navigateRegen(${index},1)" ${rv.current===total-1?'disabled':''}title="Respuesta siguiente">▶</button>
       </div>`;
   }
@@ -871,7 +881,7 @@ function ctxDeleteMsg() {
   // Remove regen variants for this index
   delete regenVariants[ctxMsgIndex];
   messages.splice(ctxMsgIndex, 1);
-  // Re-key regenVariants since indices shifted
+  // Re-key regenVariants since indices shifted (modes array is inside the object, preserved automatically)
   const newRegen = {};
   Object.entries(regenVariants).forEach(([k, v]) => {
     const ki = parseInt(k);
@@ -885,9 +895,10 @@ function ctxDeleteMsg() {
 async function ctxRegenMsg() {
   if (ctxMsgIndex < 0 || isLoading) return;
   const idx = ctxMsgIndex;
+  const modeUsed = chatMode; // capture current mode at moment of regen
   if (!regenVariants[idx]) {
-    // First regen: store original as variant 0, will add new as variant 1
-    regenVariants[idx] = { variants: [messages[idx].content], current: 0 };
+    // First regen: store original content as variant 0 (mode unknown → 'original')
+    regenVariants[idx] = { variants: [messages[idx].content], modes: ['original'], current: 0 };
   }
   setLoading(true); showTyping();
   try {
@@ -898,11 +909,12 @@ async function ctxRegenMsg() {
     messages = saved; // restore
     removeTyping();
     regenVariants[idx].variants.push(reply);
+    regenVariants[idx].modes.push(modeUsed);
     regenVariants[idx].current = regenVariants[idx].variants.length - 1;
     messages[idx].content = reply;
     saveCurrentSession(messages);
     renderMessages(); updateMemoryHint(); renderSidebar();
-    logConsole('Respuesta regenerada ✓','ok');
+    logConsole(`Respuesta regenerada con modo "${modeUsed}" ✓`, 'ok');
   } catch(err) {
     removeTyping(); logConsole('Error al regenerar: '+err.message,'error');
   }
